@@ -1,0 +1,9 @@
+jupyterlab
+jupytext
+numpy
+matplotlib
+pandas
+tensorflow
+tensorflow-gpu
+google-cloud-storage
+pydrive
