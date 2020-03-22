@@ -4,6 +4,10 @@ numpy
 matplotlib
 pandas
 tensorflow
+tensorflow_hub
 tensorflow-gpu
 google-cloud-storage
 pydrive
+nltk
+seaborn
+scikit-learn
