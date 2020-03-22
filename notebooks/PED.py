@@ -15,7 +15,6 @@
 
 # + colab={"base_uri": "https://localhost:8080/", "height": 133} colab_type="code" id="RWSJpsyKqHjH" outputId="e65be45c-5485-45a9-ee9f-03e4df37f740"
 import nltk
-
 nltk.download("punkt")
 
 import os
@@ -62,7 +61,7 @@ for cname in missing_values_df.columns:
 # **Solution**: Replace `NaN`s with "no description"
 
 # + colab={"base_uri": "https://localhost:8080/", "height": 117} colab_type="code" id="kYPvhOLo3ucr" outputId="6e416f75-ba35-4ce4-94b3-126a7645e3b1"
-df[df["description"].isna()].loc[:, "description"] = "no description"
+df.loc[df["description"].isna(), "description"] = "no description"
 
 # + [markdown] colab_type="text" id="0qhw5A3Z3tAE"
 # ### Tags
@@ -87,9 +86,6 @@ df[df["video_id"].apply(lambda x: any([not char.isalnum() and char not in "-_" f
     ["video_id", "title"]
 ].head(3)
 
-# + colab={"base_uri": "https://localhost:8080/", "height": 237} colab_type="code" id="ylAw5GTKEaaT" outputId="9996ec14-4f7c-4ae3-b8c5-dfc583c99488"
-df[df["description"].apply(lambda x: "\\n" in str(x))]["description"]
-
 # + [markdown] colab_type="text" id="gW6EAgaOTOhe"
 # ### Single video - different descriptions and titles ...
 #
@@ -106,7 +102,7 @@ df[df["description"].apply(lambda x: "\\n" in str(x))]["description"]
 # After the analysis, we decided that the only column that can distinguish videos between themselves, aside from `video_id`, is `publish_time`.
 
 # + colab={"base_uri": "https://localhost:8080/", "height": 1000} colab_type="code" id="koGb2t6cOYjA" outputId="e131f452-0377-4e65-d514-6b536f60ad09"
-for example_video_id in df["video_id"].values[:100]:
+for example_video_id in df["video_id"].values[:5]:
     if "NAZWA" not in example_video_id:
         video_id_df = df[df["video_id"] == example_video_id]
         for cname in video_id_df.columns:
@@ -114,7 +110,7 @@ for example_video_id in df["video_id"].values[:100]:
                 count_unique = len(video_id_df[cname].unique())
                 if count_unique > 1:
                     if cname == "title" or cname == "tags" or cname == "description":
-                        print("\nnumber of unique '", cname, "': ", count_unique)
+                        print("\nnumber of unique '", cname, "': ", count_unique, '\n')
                         print(video_id_df[cname].unique())
 
 # + [markdown] colab_type="text" id="WmM9S738XqSh"
@@ -126,6 +122,7 @@ for idx, t in enumerate(corrupted_id_df["publish_time"].unique()):
     corrupted_id_df.loc[corrupted_id_df["publish_time"] == t, "video_id"] = f"XXX{idx}"
 
 df.loc[corrupted_id_df.index, :] = corrupted_id_df
+
 df[df["video_id"].apply(lambda x: "XXX" in x)][["video_id", "title", "publish_time"]].head()
 
 # + [markdown] colab_type="text" id="gI1hhZuRZPUC"
@@ -165,7 +162,7 @@ categories = categories[~np.isnan(categories)]
 print("NANs:", nans.shape, "not NANs:", categories.shape)
 
 df.hist(column="category_id", bins=int(max(categories)))
-Counter(categories.tolist()).most_common(100)
+Counter(categories.tolist()).most_common()
 
 # + [markdown] colab_type="text" id="fUeS6cNTkZFz"
 # ## Preview some categories examples
@@ -179,14 +176,107 @@ df[df["category_id"] == 24].head(10)["title"]
 
 # + [markdown] colab_type="text" id="ILzJC6_ayRj7"
 # # TEXT Attributes
+# - publish time
 # - title
 # - channel title
-# - publish time
 # - tags
 # - description
+# -
+
+# ## 1. Publish Time
+# A) Years of publish
+#
+
+# +
+import dateutil.parser
+
+dates = [dateutil.parser.isoparse(d) for d in df["publish_time"].unique()]
+years = [d.year for d in dates]
+count_years = Counter(years)
+
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(8, 6))
+its =  sorted(count_years.items(), key=lambda x : -1*x[1])
+rects = ax.bar([it[0] for it in its], [it[1] for it in its])
+ax.set_xticks([it[0] for it in its])
+ax.set_title("Years of publish_time")
+# -
+
+# *B*) Month of publish
+# > We can see that during some months, there have been much less trending videos than during other ones. In particular, months July to October (inclusive) are very rare.
+#
+
+# +
+import datetime 
+
+months = [d.month for d in dates]
+count_months = Counter(months)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+its =  sorted(count_months.items(), key=lambda x : -1*x[1])
+rects = ax.bar([it[0] for it in its], [it[1] for it in its])
+
+ax.set_xticks([it[0] for it in its])
+ax.set_xticklabels([datetime.date(1900, it[0], 1).strftime('%B') for it in its], rotation=30)
+ax.set_title("Months of publish_time")
+# -
+
+# C) Weekday
+# > Conversely to what we expected, most trending videos have not been published on weekend
+
+# +
+days = [d.weekday() for d in dates]
+count_days = Counter(days)
+weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+fig, ax = plt.subplots(figsize=(8, 6))
+its =  count_days.items()
+rects = ax.bar([it[0] for it in its], [it[1] for it in its])
+
+ax.set_xticks([it[0] for it in its])
+ax.set_xticklabels([weekDays[it[0]] for it in its], rotation=30)
+ax.set_title("WeekDays of publish_time")
+# -
+
+# ADD week_day attribute
+df["week_day"] = df["publish_time"].apply(lambda x : dateutil.parser.isoparse(x).weekday())
+
+# D) Hour
+# > There is a significant increase in trending videos in the middle of the day, between 13:00 and 19:00
+#
+# > Hours can be divided into four periods in a day:
+# - 00:00 - 06:00 (time_of_day = 1)
+# - 06:00 - 12:00 (time_of_day = 2)
+# - 12:00 - 18:00 (time_of_day = 3)
+# - 18:00 - 24:00 (time_of_day = 4)
+#
+# Let's make an attribute out of that.
+
+# +
+hours = [d.hour for d in dates]
+count_hours = Counter(hours)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+its =  sorted(count_hours.items(), key=lambda x : -1*x[1])
+rects = ax.bar([it[0] for it in its], [it[1] for it in its])
+
+ax.set_xticks([it[0] for it in its])
+ax.set_xticklabels([f"{it[0]:02d}:00" for it in its], rotation=40)
+ax.set_title("Hours of publish_time")
+
+
+# +
+def extract_time_of_day(datestring):
+  d = dateutil.parser.isoparse(datestring)
+  return d.hour // 6 + 1
+
+# ADD time_of_day attribute
+df["time_of_day"] = df["publish_time"].apply(extract_time_of_day)
+df[["time_of_day", "publish_time"]].head()
 
 # + [markdown] colab_type="text" id="9di0iCsJyo6x"
-# ## 1. Title
+# ## 2. Title
 # Lengths in characters
 # > On average, aroubd 50 characters describe the title
 
