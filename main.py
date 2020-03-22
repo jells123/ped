@@ -44,7 +44,7 @@ def main():
     # Integrate data
     df = preprocess.integrate_data(FILENAMES_TO_INTEGRATE)
 
-    # TODO missing values
+    # Fill missing values
     df = preprocess.fill_missing_values(df)
 
     # TODO column transformation + additional features

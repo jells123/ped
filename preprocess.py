@@ -13,6 +13,16 @@ def integrate_data(data_filenames):
 
 
 def fill_missing_values(df):
+
+    # fix NaNs in description
+    df.loc[df["description"].isna(), "description"] = "no description"
+
+    # fix #NAZWA? in video_id
+    corrupted_id_df = df[df["video_id"] == "#NAZWA?"]
+    for idx, t in enumerate(corrupted_id_df["publish_time"].unique()):
+        corrupted_id_df.loc[corrupted_id_df["publish_time"] == t, "video_id"] = f"XXX{idx}"
+    df.loc[corrupted_id_df.index, :] = corrupted_id_df
+
     return df
 
 
