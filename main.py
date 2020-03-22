@@ -2,6 +2,8 @@ import argparse
 import logging
 
 import download_data
+import preprocess
+from config import FILENAMES_TO_INTEGRATE
 
 LOGGING_FORMAT = "%(asctime)-15s"
 
@@ -39,13 +41,18 @@ def main():
     if args.drive_folder_id:
         download_data.download(args.drive_folder_id)
 
+    # Integrate data
+    df = preprocess.integrate_data(FILENAMES_TO_INTEGRATE)
+
     # TODO missing values
+    df = preprocess.fill_missing_values(df)
 
     # TODO column transformation + additional features
 
     # TODO grouping by video_id ?
 
     # TODO predict
+    pass
 
 
 if __name__ == "__main__":
