@@ -271,6 +271,7 @@ df["not_alpha_count"] = df["title"].apply(
 df.sort_values(by="not_alpha_count", ascending=False)[["title", "not_alpha_count"]].head(10)
 
 # + [markdown] colab_type="text" id="9hhGDugcQZr8"
+#
 # ### Most common words, without preprocessing:
 # > One can observe that punctuation is one of the most frequent 'words'
 
@@ -331,9 +332,9 @@ df.columns
 
 
 # +
-def calc_embeddings(df, write_visualizations_files=False):
+def calc_embeddings(df, column_names, write_visualizations_files=False):
     extended_df = df
-    for column in ["title", "channel_title"]: # , "description" Description doesnt work...
+    for column in column_names:
         # batch_processing
         batch_size = 1000
         input_col = df[column].to_numpy()
@@ -345,13 +346,38 @@ def calc_embeddings(df, write_visualizations_files=False):
         if len(input_col) % batch_size:
             result[batch_size * i:]= embed(input_col[batch_size * i:]).numpy()
         if write_visualizations_files:
-            write_embedding_files(np.unique(input_col), np.unique(result, axis=0), prefix=column)
+            unique_inputs, unique_indexes = np.unique(input_col, return_index=True) 
+            write_embedding_files(unique_inputs, result[unique_indexes], prefix=column)
         extended_df[f"{column}_embed"] = list(result)
     return extended_df
 
-extended_df = calc_embeddings(df, True)
+extended_df = calc_embeddings(df, ["title", "channel_title"], True) # , "description" Description doesnt work...
 # -
+
+np.unique([[0, 1], [0, 1]], axis=0)
 
 pd.set_option("colwidth", 15)
 print(extended_df.head())
 pd.set_option("colwidth", None)
+
+
+# ### Tags
+
+# +
+def tags_transformer(x):
+    return ", ".join(sorted([tag.replace('"', "") for tag in x.split("|")]))
+
+transformed_tags = df["tags"].apply(tags_transformer)
+# -
+
+transformed_tags.head()
+
+cosine_loss = tf.keras.losses.CosineSimilarity(axis=1)
+print(transformed_tags[0])
+cosine_loss(embed([transformed_tags[0]]), embed(["lewis, christmas, what, none, moz"]))
+
+extended_df = calc_embeddings(pd.DataFrame({"tags": transformed_tags}), ["tags"], True)
+
+extended_df
+
+
