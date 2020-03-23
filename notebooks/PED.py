@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ---
 # jupyter:
 #   jupytext:
@@ -371,7 +372,7 @@ df[["time_of_day", "publish_time"]].head()
 
 # + [markdown] colab_type="text" id="9di0iCsJyo6x"
 # ## 2. Title
-
+#
 # **Lengths in characters**
 # > On average, around 50 characters describe the title.
 #
@@ -517,7 +518,7 @@ sns.distplot(lengths)
 # > Looking at the distribution of tags counts, we can tell that there is no simple relation such as: the more tags the better.
 
 df["tags_count"] = df["tags"].apply(lambda x : x.count('|') if '|' in x else -1)
-sns.distplot(count_tags)
+sns.distplot(df["tags_count"])
 
 
 # #### Are there any popular tags?
@@ -577,8 +578,53 @@ chars_clusters = list(zip(map(chr, codes.reshape(-1)), y_kmeans))
 for i in range(nc):
     print("\nCLUSTER #", i)
     print(list(filter(lambda x: x[1] == i, chars_clusters))[:20])
+    print(ord(list(filter(lambda x: x[1] == i, chars_clusters))[0][0]))
+
+
 # -
 
+
+# ### Emojis analysis
+
+# +
+def read_emojis_txt(filename):
+    emojis_df = pd.read_csv(filename, sep=";", header=None, comment="#")
+    print(emojis_df[0].head())
+    array = emojis_df[0].to_numpy()
+    result = []
+    for code in array:
+        # range
+        code = code.strip()
+        if ".." in code:
+            begin_code, end_code = code.split("..")
+            for code in range(int(begin_code, 16), int(end_code, 16)):
+                result.append(chr(code))
+            pass
+        elif not " " in code:
+            result.append(chr(int(code, 16)))
+    print(len(result))
+    return set(result)
+    
+
+emojis = read_emojis_txt("emojis.txt")
+
+# small test
+"👻" in emojis
+
+
+# +
+def count_emojis(text):
+    return sum([1 for char in text if char in emojis])
+
+df["emojis_counts"] = df["description"].apply(count_emojis)
+# -
+
+print(df["emojis_counts"].describe())
+sum(df["emojis_counts"] == 0), sum(df["emojis_counts"] != 0)
+
+# #### There is not much emojis in descriptions, anyway added column into consideration
+
+sns.distplot(df["emojis_counts"][df["emojis_counts"] != 0])
 
 # ### Embeddings
 
@@ -680,5 +726,3 @@ cosine_loss(embed([transformed_tags[0]]), embed(["lewis, christmas, what, none, 
 extended_df = calc_embeddings(pd.DataFrame({"tags": transformed_tags}), ["tags"], True)
 
 extended_df
-
-
