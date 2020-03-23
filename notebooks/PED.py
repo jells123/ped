@@ -509,12 +509,43 @@ print(pd.DataFrame({"length_statistics": lengths}).describe())
 sns.distplot(lengths)
 # -
 
+# -
+
 # ## 4. Tags
 #
 # > For Tags, we simply apply **counting**. If **Tags** are `[none]`, we use $-1$ to denote this special value.
+# > Looking at the distribution of tags counts, we can tell that there is no simple relation such as: the more tags the better.
 
 df["tags_count"] = df["tags"].apply(lambda x : x.count('|') if '|' in x else -1)
 sns.distplot(count_tags)
+
+
+# #### Are there any popular tags?
+# We apply `unique` in order to find popular tags,as if there was a video which was trending for many days, its tags are recorded multiple times. This would distort the distribution of tags across all the videos.
+#
+# > Some tags are more common than other ones, however most of them are connected to some fixed category, for example `trailer` - implies that the video content will be a movie trailer.
+
+# +
+
+all_tags_list = df["tags"].apply(lambda x : [tag.lower().replace('"', '') for tag in x.split('|')]).values
+print(len(all_tags_list))
+all_tags_list = np.unique(all_tags_list)
+print(len(all_tags_list))
+
+all_tags = []
+all_tags_tokens = []
+for atl in all_tags_list:
+    all_tags.extend(atl)
+    for tag in atl:
+        all_tags_tokens.extend(tag.split())
+    
+print("\nPOPULAR TAGS:")
+print(Counter(all_tags).most_common(30))
+# -
+
+print("POPULAR TAGS TOKENS:")
+print(Counter(all_tags_tokens).most_common(30))
+
 
 # ## 5. Description
 
