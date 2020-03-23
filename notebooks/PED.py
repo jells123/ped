@@ -277,8 +277,11 @@ df[["time_of_day", "publish_time"]].head()
 
 # + [markdown] colab_type="text" id="9di0iCsJyo6x"
 # ## 2. Title
-# Lengths in characters
-# > On average, aroubd 50 characters describe the title
+#
+# **Lengths in characters**
+# > On average, around 50 characters describe the title.
+#
+# > It seems as if there was normal distribution of title length in characters, with a right tail slightly longer.
 
 # + colab={"base_uri": "https://localhost:8080/", "height": 432} colab_type="code" id="vcIFgnRUQxnx" outputId="9d8ec612-0be9-4da7-810a-2dd576cedb2d"
 import seaborn as sns
@@ -335,38 +338,43 @@ for t in titles:
 print(pd.DataFrame({"length_statistics": lengths}).describe())
 sns.distplot(lengths)
 
-# + [markdown] colab_type="text" id="JAV-a2GwbRUE"
-# Look for titles without alphabetical characters at all.
-# > Turns out there is one title repeating, `435`, with the following trending dates changing
+# -
 
-# + colab={"base_uri": "https://localhost:8080/", "height": 197} colab_type="code" id="bD6BaDAkarbr" outputId="ab3eb9cf-3547-489d-b46d-a600e7569105"
-df[df["title"].apply(lambda x: True if all([not char.isalpha() for char in x]) else False)].loc[
-    :, ["video_id", "title", "channel_title", "trending_date"]
-].head(5)
-
-# + [markdown] colab_type="text" id="8pfaz2Gqc_fH"
-# Look for titles that are all UPPERCASE
-
-# + colab={"base_uri": "https://localhost:8080/", "height": 214} colab_type="code" id="sx1LdUFpcxw3" outputId="becb7f93-f1df-4845-fbf1-0bfa550aa72e"
-upper = df[
-    df["title"].apply(lambda x: True if all([char.isupper() or not char.isalpha() for char in x]) else False)
-].loc[:, ["video_id", "title", "channel_title", "trending_date"]]
-print(upper.shape)
-upper.head(5)
-
-# + colab={"base_uri": "https://localhost:8080/", "height": 347} colab_type="code" id="anX1eqiWdE1U" outputId="af26830a-481d-4fde-fd30-f112518450b2"
-df["not_alpha_count"] = df["title"].apply(
-    lambda x: sum([1 if not char.isalnum() and not char.isspace() else 0 for char in x])
-)
-df.sort_values(by="not_alpha_count", ascending=False)[["title", "not_alpha_count"]].head(10)
-
-# + [markdown] colab_type="text" id="9hhGDugcQZr8"
+# ## 4. Tags
 #
-# ### Most common words, without preprocessing:
-# > One can observe that punctuation is one of the most frequent 'words'
+# > For Tags, we simply apply **counting**. If **Tags** are `[none]`, we use $-1$ to denote this special value.
+#
+# > Looking at the distribution of tags counts, we can tell that there is no simple relation such as: the more tags the better.
 
-# + colab={} colab_type="code" id="A9EHQzapP6NG"
+# #### Are there any popular tags?
+# We apply `unique` in order to find popular tags,as if there was a video which was trending for many days, its tags are recorded multiple times. This would distort the distribution of tags across all the videos.
+#
+# > Some tags are more common than other ones, however most of them are connected to some fixed category, for example `trailer` - implies that the video content will be a movie trailer.
 
+# +
+def tags_transformer(x):
+    return ", ".join(sorted([tag.replace('"', "") for tag in x.split("|")]))
+
+all_tags_list = df["tags"].apply(lambda x : [tag.lower().replace('"', '') for tag in x.split('|')]).values
+print(len(all_tags_list))
+all_tags_list = np.unique(all_tags_list)
+print(len(all_tags_list))
+
+all_tags = []
+all_tags_tokens = []
+for atl in all_tags_list:
+    all_tags.extend(atl)
+    for tag in atl:
+        all_tags_tokens.extend(tag.split())
+    
+print("\nPOPULAR TAGS:")
+print(Counter(all_tags).most_common(30))
+# -
+
+print("POPULAR TAGS TOKENS:")
+print(Counter(all_tags_tokens).most_common(30))
+
+# ## 5. Description
 # -
 
 # ### Embeddings
