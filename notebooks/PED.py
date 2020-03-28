@@ -680,7 +680,6 @@ df.columns
 
 # +
 def calc_embeddings(df, column_names, write_visualizations_files=False):
-    extended_df = df
     for column in column_names:
         # batch_processing
         batch_size = 1000
@@ -695,10 +694,9 @@ def calc_embeddings(df, column_names, write_visualizations_files=False):
         if write_visualizations_files:
             unique_inputs, unique_indexes = np.unique(input_col, return_index=True) 
             write_embedding_files(unique_inputs, result[unique_indexes], prefix=column)
-        extended_df[f"{column}_embed"] = list(result)
-    return extended_df
+        df[f"{column}_embed"] = list(result)
 
-extended_df = calc_embeddings(df, ["title", "channel_title"], True) # , "description" Description doesnt work...
+calc_embeddings(df, ["title", "channel_title"], False) # , "description" Description doesnt work...
 # -
 
 np.unique([[0, 1], [0, 1]], axis=0)
