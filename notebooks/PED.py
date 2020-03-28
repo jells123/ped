@@ -527,7 +527,6 @@ sns.distplot(df["tags_count"])
 # > Some tags are more common than other ones, however most of them are connected to some fixed category, for example `trailer` - implies that the video content will be a movie trailer.
 
 # +
-
 all_tags_list = df["tags"].apply(lambda x : [tag.lower().replace('"', '') for tag in x.split('|')]).values
 print(len(all_tags_list))
 all_tags_list = np.unique(all_tags_list)
@@ -549,11 +548,122 @@ print(Counter(all_tags_tokens).most_common(30))
 
 
 # ## 5. Description
+# **Lengths in characters**
+#
+# > Average length of description in characters is close to one thousand. However, the standard deviation is also very high, very close to the mean - roughly 845 characters. Median of the distribution is equal to 733 characters.
+#
+# > Almost no-descriptions also happen: minimum value observed is 1.
 
-df["description"].values[0]
+# +
+descriptions = df["description"].values
+lengths = list(map(len, descriptions))
+
+# ADD title_length_chars attribute
+df["description_length_chars"] = df["description"].apply(len)
+
+print(pd.DataFrame({"length_statistics": lengths}).describe())
+sns.distplot(lengths)
+# -
+
+# **Lengths in tokens**
+# > On average, there are 156 words (tokens) per description. Maximum observation was 1520, which is a great outlier as the 75th percentile is equal to 212 words. 
+
+# +
+lengths = []
+for d in descriptions:
+    lengths.append(len(word_tokenize(d)))
+
+# ADD title_length_tokens attribute
+df["description_length_tokens"] = df["description"].apply(lambda x : len(word_tokenize(x)))
+    
+print(pd.DataFrame({"length_statistics": lengths}).describe())
+sns.distplot(lengths)
+
+
+# -
+
+# **Lengths in lines**
+# > For description, we decided also to count newlines. This is because youtubers often format description in some way, for example enuemrating links to their social medias in new lines each.
+#
+# > It turned out that many descriptions have no new line at all. We suspect that sometimes there could have been an error when exporting the data.
+
+# +
+def count_newlines(x):
+    x = x.replace(r'\\n', r'\n')
+    return x.count(r'\n')
+
+# ADD title_length_tokens attribute
+df["description_length_newlines"] = df["description"].apply(count_newlines)
+    
+print(df["description_length_newlines"].describe())
+sns.distplot(df["description_length_newlines"])
+# -
+
+# **Upper vs. Lower case (again)**
+# > We take a look onto uppercase letters again, followed by what we discovered in titles.
+#
+# > For the description attribute, the tendency towards using uppercase letters is smaller. Most ratios don't exceed 10%.
+
+# +
+# ADD title_uppercase_ratio attribute
+df["description_uppercase_ratio"] = df["description"].apply(get_uppercase_ratio)
+
+uppercase_ratio = df["description_uppercase_ratio"]
+print(uppercase_ratio.describe())
+sns.distplot(uppercase_ratio)
+# -
+
+# **Number of URLs per description**
+# > We observed that users often leave many links in their descriptions, such as: instagram profile, twitter profile, subscribe redirection url, or event download links. It may be useful to keep track on how many URLs each description has.
+#
+# > Although some descriptions lack URLs, the median count of URLs is equal to 7 - quite a lot - and the maximum observation is 83 URLs!
+
+# +
+import re
+
+best_url_regex = r'(http:\/\/www\.|http:\/\/|https:\/\/www\.|https:\/\/|www\.)?(?P<domain>([a-zA-Z0-9]+\.)+[a-zA-Z0-9]+)\/*[a-zA-Z0-9-_\/\.]*'
+df["description_url_count"] = df["description"].apply(lambda x : len(re.findall(best_url_regex, x)))
+
+print(df["description_url_count"].describe())
+sns.distplot(df["description_url_count"])
+# -
+
+# #### Which URLs are popular?
+
+# +
+descriptions = df["description"].unique()
+
+domains = []
+for d in descriptions:
+    matches = re.findall(best_url_regex, d)
+    for m in matches:
+        if len(m) > 1:
+            domains.append(m[1])
+
+top_domains = Counter(domains).most_common(30)
+print(top_domains)
+# -
+
+# #### For the most popular URLs, in how many unique descriptions (in %) do they appear?
+# > Some URLs appear very often:
+# - twitter.com
+# - facebook.com
+# - instagram.com
+#
+# We can hypothesise that trending videos include links to popular social medias. It is correlated with the fact that if some youtuber is popular, then she/he already has accounts on many other social medias as well, to reach out to more fans.
+
+# +
+percentages = []
+for domain, count in top_domains:
+    percentage = sum(1 if domain in d else 0 for d in descriptions) / len(descriptions) * 100.0
+    percentages.append((domain, percentage))
+
+for domain, count in sorted(percentages, key=lambda x : -x[1]):
+    print(f"{domain} : {count:.3f}%")
 
 # + [markdown] colab_type="text" id="cq93_rI8oVaA"
 # ### Non-ascii characters
+# # `TO DELETE?`
 
 # + colab={"base_uri": "https://localhost:8080/", "height": 617} colab_type="code" id="eLmzFyXUmsOU" outputId="127c43f7-6a85-433b-aaff-d2fce0604ee9"
 count_chars = Counter("".join(titles))
