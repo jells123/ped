@@ -12,3 +12,6 @@ nltk
 seaborn
 scikit-learn
 urllib2
+keras-ocr
+pyspellchecker
+face_recognition
