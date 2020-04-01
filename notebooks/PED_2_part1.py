@@ -384,8 +384,7 @@ df_images.head(10)
 # ### A) When converted to grayscale
 
 # +
-img_cache = {} if not img_cache else img_cache
-
+img_cache = {}
 def get_gray_histogram(image_filename):
     global img_cache
     if image_filename not in img_cache:
@@ -512,6 +511,8 @@ df_images.head()
 # Green and pink medians are rare.
 
 # +
+import matplotlib.colors
+
 hue_medians = df_images.loc[:, "hue_median"].values
 BINS = 10
 n, bins, patches = plt.hist(hue_medians, edgecolor='black', bins=10)
