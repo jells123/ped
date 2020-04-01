@@ -812,7 +812,7 @@ calc_embeddings(df, ["title", "channel_title"], False) # , "description" Descrip
 np.unique([[0, 1], [0, 1]], axis=0)
 
 pd.set_option("colwidth", 15)
-print(extended_df.head())
+print(df.head())
 pd.set_option("colwidth", None)
 
 
@@ -822,15 +822,15 @@ pd.set_option("colwidth", None)
 def tags_transformer(x):
     return ", ".join(sorted([tag.replace('"', "") for tag in x.split("|")]))
 
-transformed_tags = df["tags"].apply(tags_transformer)
+df["transormed_tags"] = df["tags"].apply(tags_transformer)
 # -
 
-transformed_tags.head()
+df["transormed_tags"].head()
 
 cosine_loss = tf.keras.losses.CosineSimilarity(axis=1)
-print(transformed_tags[0])
-cosine_loss(embed([transformed_tags[0]]), embed(["lewis, christmas, what, none, moz"]))
+print(df["transormed_tags"][0])
+cosine_loss(embed([df["transormed_tags"][0]]), embed(["lewis, christmas, what, none, moz"]))
 
-extended_df = calc_embeddings(pd.DataFrame({"tags": transformed_tags}), ["tags"], True)
+calc_embeddings(df, ["transormed_tags"], False)
 
-extended_df
+df
