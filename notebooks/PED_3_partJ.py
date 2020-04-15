@@ -257,18 +257,23 @@ for idx, cname in enumerate(corr.index):
     print(cname, '-', corr.index[furthest_idx], ' : ', min_corr)
     
     print()
+
+
 # -
 
 # ### "Flatten" histogram values into columns
 
 # +
-agg_df_histograms = agg_df[[cname for cname in agg_df.columns if 'histogram' in cname]]
-for cname in agg_df_histograms.columns:
-    if 'histogram' in cname:
-        prefix = cname.split('_')[0]
-        for i in range(5):
-            agg_df_histograms[f"{prefix}_{i}_bin"] = agg_df_histograms[cname].apply(lambda x : x[i])
-        agg_df_histograms = agg_df_histograms.drop(columns=[cname])
+def transform_histogram_df(df):
+    for cname in df.columns:
+        if 'histogram' in cname:
+            prefix = cname.split('_')[0]
+            for i in range(5):
+                df[f"{prefix}_{i}_bin"] = df[cname].apply(lambda x : x[i])
+            df = df.drop(columns=[cname])
+    return df
+
+agg_df_histograms = transform_histogram_df(agg_df[[cname for cname in agg_df.columns if 'histogram' in cname]])
      
 # VERY important, remove -1.0s! 
 agg_df_histograms = agg_df_histograms[agg_df_histograms["gray_0_bin"] != -1.0]
@@ -292,51 +297,102 @@ ax.hlines([0, 5, 10, 15, 20], *ax.get_xlim())
 ax.vlines([0, 5, 10, 15, 20], *ax.get_xlim())
 # -
 
+# ### Histogram bins variances
+
+# +
+normalized_df = (agg_df_histograms - agg_df_histograms.min()) / (agg_df_histograms.max()-agg_df_histograms.min())
+
+stats = normalized_df.describe()
+
+std_deviations = stats.loc["std", :].sort_values(ascending=False) ** 2
+std_deviations.plot.bar(figsize=(14, 7), rot=45)
+# -
+
 # > Feature selection is performed using ANOVA F measure via the f_classif() function.
 
 # +
 print(categories_df.shape)
-categories_df_histograms = categories_df[[cname for cname in categories_df.columns if 'histogram' in cname]]
 
-categories_df_numeric = categories_df[[cname for idx, cname in enumerate(categories_df.columns) if categories_df.dtypes[idx] in [np.int64, np.float64]]]
+categories_df_numeric = transform_histogram_df(categories_df)
+categories_df_numeric = categories_df_numeric[[cname for idx, cname in enumerate(categories_df_numeric.columns) if categories_df_numeric.dtypes[idx] in [np.int64, np.float64]]]
+
 y = categories_df_numeric["category_id"].values
 X = categories_df_numeric.drop(columns=["category_id"]).fillna(-1.0)
 X = (X - X.min()) / (X.max()-X.min()+1e-12) # normalize values - how about those that are missing?
 
 X_columns = X.columns
 X = X.values
-X
+X.shape
 
 # +
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import f_classif
 
-selector = SelectKBest(score_func=f_classif, k=20)
+selector = SelectKBest(score_func=f_classif, k=15)
 fit = selector.fit(X, y)
 
 # summarize scores
 print(fit.scores_)
 features = fit.transform(X)
 
-# summarize selected features
-print(features[0:5,:])
-# -
-
 cols = selector.get_support(indices=True)
-X_columns[cols]
+print(list(X_columns[cols]))
+
+X_indices = np.arange(X.shape[-1])
+plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
+plt.xticks(rotation=45)
+
 
 # +
 from sklearn.feature_selection import chi2
 
-selector = SelectKBest(score_func=chi2, k=20)
+selector = SelectKBest(score_func=chi2, k=10)
 fit = selector.fit(X, y)
 
 # summarize scores
 print(fit.scores_)
 features = fit.transform(X)
 
-# summarize selected features
-print(features[0:5,:])
-# -
+cols = selector.get_support(indices=True)
+print(list(X_columns[cols]))
+
+X_indices = np.arange(X.shape[-1])
+# plt.bar(X_indices, selector.pvalues_)
 
 
+# +
+from sklearn.feature_selection import mutual_info_classif
+
+selector = SelectKBest(score_func=mutual_info_classif, k=10)
+fit = selector.fit(X, y)
+
+# summarize scores
+print(fit.scores_)
+features = fit.transform(X)
+
+cols = selector.get_support(indices=True)
+print(list(X_columns[cols]))
+
+# +
+import matplotlib.pyplot as plt
+from sklearn.svm import SVC
+from sklearn.model_selection import StratifiedKFold
+from sklearn.feature_selection import RFECV
+from sklearn.datasets import make_classification
+
+# Create the RFE object and compute a cross-validated score.
+svc = SVC(kernel="linear")
+# The "accuracy" scoring is proportional to the number of correct
+# classifications
+rfecv = RFECV(estimator=svc, step=1, cv=StratifiedKFold(n_splits=15, shuffle=True, random_state=15042020),
+              scoring='accuracy')
+rfecv.fit(X, y)
+
+print("Optimal number of features : %d" % rfecv.n_features_)
+
+# Plot number of features VS. cross-validation scores
+plt.figure()
+plt.xlabel("Number of features selected")
+plt.ylabel("Cross validation score (nb of correct classifications)")
+plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
+plt.show()
