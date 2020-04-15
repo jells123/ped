@@ -146,6 +146,7 @@ categories_df.shape
 # -
 
 # ### Analyze features stats
+# > In order to do so, we normalize all the values into one range: 0-1, so that the variances are more comparable
 
 # +
 normalized_df = (agg_df_numeric - agg_df_numeric.mean()) / agg_df_numeric.std()
@@ -187,6 +188,56 @@ xxx = ax.set_xticklabels(
 )
 # -
 
+# ## Let's go deeper
+# ### Visual attributes
+
+# +
+visual_words = ['detect', 'face', 'gray', 'hue', 'saturation', 'value', 'edges']
+select_columns = [cname for cname in agg_df_numeric.columns if any([word in cname for word in visual_words])]
+
+select_df = agg_df_numeric[select_columns]
+select_df = select_df[select_df != -1.0]
+
+corr = select_df.corr()
+ax = sns.heatmap(
+    corr, 
+    vmin=-1, vmax=1, center=0,
+    cmap=sns.diverging_palette(20, 220, n=200),
+    square=True,
+    annot=True
+)
+
+xxx = ax.set_xticklabels(
+    ax.get_xticklabels(),
+    rotation=45,
+    horizontalalignment='right'
+)
+# -
+
+# ## Title, Channel Title + Description attributes
+
+# +
+select_columns = [cname for cname in agg_df_numeric.columns if any([word in cname for word in ["title", "description"]])]
+
+select_df = agg_df_numeric[select_columns]
+select_df = select_df[select_df != -1.0]
+
+corr = select_df.corr()
+ax = sns.heatmap(
+    corr, 
+    vmin=-1, vmax=1, center=0,
+    cmap=sns.diverging_palette(20, 220, n=200),
+    square=True,
+    annot=True
+)
+
+xxx = ax.set_xticklabels(
+    ax.get_xticklabels(),
+    rotation=45,
+    horizontalalignment='right'
+)
+# -
+
 # ## Print most and least correlated feature for each column
 
 # +
@@ -210,17 +261,17 @@ for idx, cname in enumerate(corr.index):
 
 # ### "Flatten" histogram values into columns
 
+# +
+agg_df_histograms = agg_df[[cname for cname in agg_df.columns if 'histogram' in cname]]
 for cname in agg_df_histograms.columns:
     if 'histogram' in cname:
         prefix = cname.split('_')[0]
         for i in range(5):
             agg_df_histograms[f"{prefix}_{i}_bin"] = agg_df_histograms[cname].apply(lambda x : x[i])
         agg_df_histograms = agg_df_histograms.drop(columns=[cname])
-        
-
-# ## ?? What does THAT mean ?? ...
-# All positive correlations?
-#
+     
+# VERY important, remove -1.0s! 
+agg_df_histograms = agg_df_histograms[agg_df_histograms["gray_0_bin"] != -1.0]
 
 # +
 corr = agg_df_histograms.corr()
@@ -236,6 +287,56 @@ xxx = ax.set_xticklabels(
     rotation=45,
     horizontalalignment='right'
 )
+
+ax.hlines([0, 5, 10, 15, 20], *ax.get_xlim())
+ax.vlines([0, 5, 10, 15, 20], *ax.get_xlim())
+# -
+
+# > Feature selection is performed using ANOVA F measure via the f_classif() function.
+
+# +
+print(categories_df.shape)
+categories_df_histograms = categories_df[[cname for cname in categories_df.columns if 'histogram' in cname]]
+
+categories_df_numeric = categories_df[[cname for idx, cname in enumerate(categories_df.columns) if categories_df.dtypes[idx] in [np.int64, np.float64]]]
+y = categories_df_numeric["category_id"].values
+X = categories_df_numeric.drop(columns=["category_id"]).fillna(-1.0)
+X = (X - X.min()) / (X.max()-X.min()+1e-12) # normalize values - how about those that are missing?
+
+X_columns = X.columns
+X = X.values
+X
+
+# +
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import f_classif
+
+selector = SelectKBest(score_func=f_classif, k=20)
+fit = selector.fit(X, y)
+
+# summarize scores
+print(fit.scores_)
+features = fit.transform(X)
+
+# summarize selected features
+print(features[0:5,:])
+# -
+
+cols = selector.get_support(indices=True)
+X_columns[cols]
+
+# +
+from sklearn.feature_selection import chi2
+
+selector = SelectKBest(score_func=chi2, k=20)
+fit = selector.fit(X, y)
+
+# summarize scores
+print(fit.scores_)
+features = fit.transform(X)
+
+# summarize selected features
+print(features[0:5,:])
 # -
 
 
