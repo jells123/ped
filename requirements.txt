@@ -15,3 +15,6 @@ urllib2
 keras-ocr
 pyspellchecker
 face_recognition
+
+mkl
+ipykernel

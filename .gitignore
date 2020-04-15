@@ -135,3 +135,5 @@ data
 client_secrets.json
 *ipynb
 
+models/
+*.h5
