@@ -16,6 +16,7 @@
 
 # +
 import pandas as pd
+import numpy as np
 import os
 
 text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
@@ -149,7 +150,8 @@ categories_df.shape
 # > In order to do so, we normalize all the values into one range: 0-1, so that the variances are more comparable
 
 # +
-normalized_df = (agg_df_numeric - agg_df_numeric.mean()) / agg_df_numeric.std()
+# normalized_df = (agg_df_numeric - agg_df_numeric.mean()) / agg_df_numeric.std()
+
 normalized_df = (agg_df_numeric - agg_df_numeric.min()) / (agg_df_numeric.max()-agg_df_numeric.min())
 
 stats = normalized_df.describe()
@@ -161,19 +163,22 @@ stats
 # +
 import matplotlib.pyplot as plt
 
-std_deviations = stats.loc["std", :].sort_values(ascending=False) ** 2
+std_deviations = stats.loc["std", :].sort_values(ascending=False)
 std_deviations.plot.bar(figsize=(14, 7), rot=80)
 # -
 
-std_deviations[ std_deviations < 0.01 ]
+std_deviations[ std_deviations < 0.1 ]
 
 # ## Feature corerlations
+# > Using `-1.0` to denote missing values will potentially break the usefulness of correlation coef, so in the next heatmaps we split the features by their 'domain' (text or visual), skipping the missing values. This makes new coefficients more relevant.
 
 # +
 import seaborn as sns
 sns.set(rc={'figure.figsize':(18, 14)})
 
-corr = agg_df_numeric.corr()
+corr = agg_df_numeric[[
+    cname for cname in agg_df_numeric.columns if cname not in ["trending_date", "category_id"]]
+].corr()
 ax = sns.heatmap(
     corr, 
     vmin=-1, vmax=1, center=0,
@@ -304,7 +309,7 @@ normalized_df = (agg_df_histograms - agg_df_histograms.min()) / (agg_df_histogra
 
 stats = normalized_df.describe()
 
-std_deviations = stats.loc["std", :].sort_values(ascending=False) ** 2
+std_deviations = stats.loc["std", :].sort_values(ascending=False)
 std_deviations.plot.bar(figsize=(14, 7), rot=45)
 # -
 
@@ -340,6 +345,8 @@ print(list(X_columns[cols]))
 
 X_indices = np.arange(X.shape[-1])
 plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
+# plt.bar(X_indices, selector.pvalues_, tick_label=X_columns)
+
 plt.xticks(rotation=45)
 
 
@@ -381,7 +388,7 @@ from sklearn.feature_selection import RFECV
 from sklearn.datasets import make_classification
 
 # Create the RFE object and compute a cross-validated score.
-svc = SVC(kernel="linear")
+svc = SVC(kernel="linear", class_weight='balanced')
 # The "accuracy" scoring is proportional to the number of correct
 # classifications
 rfecv = RFECV(estimator=svc, step=1, cv=StratifiedKFold(n_splits=15, shuffle=True, random_state=15042020),
