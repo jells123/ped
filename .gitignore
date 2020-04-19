@@ -137,3 +137,4 @@ client_secrets.json
 
 models/
 *.h5
+figures/
