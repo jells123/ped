@@ -5,13 +5,12 @@ matplotlib
 pandas
 tensorflow
 tensorflow_hub
-tensorflow-gpu
+#tensorflow-gpu
 google-cloud-storage
 pydrive
 nltk
 seaborn
 scikit-learn
-urllib2
 keras-ocr
 pyspellchecker
 face_recognition

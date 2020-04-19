@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.4.1
+#       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -16,9 +16,11 @@
 # +
 import os
 
+# Disable GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 DOWNLOAD_IMAGES = False
 GENERATE_OCR = False
-CORRECT_THUMBNAIL_OCR = False
 
 path = "../data/"
 models_path = "../models"
@@ -97,10 +99,27 @@ if DOWNLOAD_IMAGES:
 # ## Text recognition
 
 
+# +
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import keras_ocr
 import pathlib
+
+def allow_memory_growth():
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
+# run the line below if you're using local runtime and have GTX > 1660 (this is known bug with tensorflow memory allocation)
+allow_memory_growth()
+# -
 
 pipeline = keras_ocr.pipeline.Pipeline()
 
@@ -116,7 +135,7 @@ list_ds = tf.data.Dataset.list_files(str(data_dir/'*'))
 
 # +
 AUTOTUNE = 10
-BATCH_SIZE = 250
+BATCH_SIZE = 100
 IMG_WIDTH, IMG_HEIGHT = 90, 120
 
 def decode_img(img):
@@ -126,7 +145,6 @@ def decode_img(img):
     img = tf.image.convert_image_dtype(img, tf.float32)
     # resize the image to the desired size.
     return tf.image.resize(img, [IMG_WIDTH, IMG_HEIGHT])
-
 def process_path(file_path):
     # load the raw data from the file as a string
     img = tf.io.read_file(file_path)
@@ -147,7 +165,7 @@ def genarete_texts_dict(ds, num_steps):
         if i == num_steps:
             break
         prediction_groups = pipeline.recognize(img_batch.numpy() * 256)
-        texts = [" ".join([item[0] for item in group])for group in prediction_groups] # joining words into sentence
+        texts = [" ".join([item[0] for itindexem in group])for group in prediction_groups] # joining words into sentence
         for filename, text in zip(filenames_batch.numpy(), texts):
             descriptions[filename.decode().split("/")[-1][:-4]] = text
     return descriptions
@@ -187,7 +205,7 @@ spell.word_frequency._longest_word_length
 import timeit
 thumbnails_path = os.path.join(path, 'corrected_thumbnail.json')
 start = timeit.default_timer()
-if False:
+if GENERATE_OCR:
     result = {}
     for i, (key, value) in enumerate(filename2text.items()):
         if i % 500 == 0:
@@ -204,6 +222,8 @@ if False:
 else:
     with open(thumbnails_path) as fp:
         result = json.load(fp)
+
+list(result.keys())[:3], list(filename2text.keys())[:3]
 
 
 # #### Visualization of results
@@ -223,9 +243,17 @@ def show_batch(image_batch, labels=None):
 image_batch, filenames = next(iter(ds))
 
 show_batch(image_batch.numpy(), [result[str(filename).split("/")[-1][:-5]] for filename in filenames[:25].numpy()])
+
+
+# +
+def url2filename_hq(url):
+    url = url.replace("default.jpg", "hqdefault.jpg")
+    return result[url2filename(url)[:-4]] if url2filename(url)[:-4] in result else ""
+
+df['thumbnail_ocr'] = df['thumbnail_link'].map(url2filename_hq)
 # -
 
-df['thumbnail_ocr'] = df['thumbnail_link'].map(lambda x: result[url2filename(x)[:-4]] if url2filename(x)[:-4] in result else "")
+df['thumbnail_ocr'].describe(), list(result.keys())[:4]
 
 # #### Apply text processing
 
@@ -267,6 +295,7 @@ def calc_embeddings(df, column_names, write_visualizations_files=False):
         num_it = len(input_col) // batch_size
 
         result = np.zeros(shape=[len(input_col), 512])
+
         for i in range(num_it):
             result[batch_size * i: batch_size * (i + 1)]= embed(input_col[batch_size * i: batch_size * (i + 1)]).numpy()
         if len(input_col) % batch_size:
@@ -334,7 +363,7 @@ emotions_map = {'Angry': 0, 'Sad': 5, 'Neutral': 4, 'Disgust': 1, 'Surprise': 6,
 emotions_map_inv = {value: key for key, value in emotions_map.items()}
 emotions_map_inv[np.argmax(face_recognition_model.predict(tf.image.rgb_to_grayscale(tf.image.resize([face_image], [48, 48]))))]
 
-# + jupyter={"outputs_hidden": true}
+# +
 from collections import Counter
 
 def transform_face_image(img):
@@ -350,7 +379,7 @@ def genarete_emotions_counts(ds, num_steps):
         face_images = [
             [
                 image[location[0]:location[2], location[3]:location[1]]
-                for location in face_recognition.face_locations(image, number_of_times_to_upsample=2, model="cnn")
+                for location in face_recognition.face_locations(image, model="cnn")
             ] 
             for image in images
         ]
@@ -399,3 +428,5 @@ df[['Angry_count', 'Neutral_count', 'Surprise_count', 'Fear_count', 'Happy_count
 
 image_batch, filenames = next(iter(ds))
 show_batch(image_batch.numpy(), [list(emotions_dict[str(filename).split("/")[-1][:-5]].keys()) for filename in filenames[:25].numpy()])
+
+

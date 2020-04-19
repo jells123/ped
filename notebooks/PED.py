@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.4.1
+#       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -833,4 +833,7 @@ cosine_loss(embed([df["transormed_tags"][0]]), embed(["lewis, christmas, what, n
 
 calc_embeddings(df, ["transormed_tags"], False)
 
-df
+df.columns
+
+df[["emojis_counts", 'title_embed', 'channel_title_embed', 'transormed_tags',
+       'transormed_tags_embed']].to_csv(os.path.join(path, "text_attributes_nawrba.csv"))

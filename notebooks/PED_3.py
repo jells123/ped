@@ -1,15 +1,16 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: ipynb,py
 #     text_representation:
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
 #       jupytext_version: 1.4.2
 #   kernelspec:
-#     display_name: ped-venv
+#     display_name: Python 3
 #     language: python
-#     name: ped-venv
+#     name: python3
 # ---
 
 # ### Load dataframes with text and visual attributes
@@ -18,14 +19,20 @@
 import pandas as pd
 import numpy as np
 import os
+import scipy.spatial
+import scipy.stats as ss
+
+FIGURES_DIR=os.path.join('..', 'figures')
+# -
 
 text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
 img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv'))
-# -
+img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv'))
+text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
 
 # #### Text DF preview
 
-print(text_df.shape)
+print(text_df.shape, img_df_2.shape, text_df_2.shape)
 text_df.head()
 
 # #### Visual DF preview
@@ -44,15 +51,31 @@ img_df.head()
 
 # +
 text_df["image_filename"] = text_df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
-df = text_df.set_index("image_filename").join(img_df.set_index("image_filename"))
+
+df = pd.concat([text_df, text_df_2, img_df_2], axis=1).set_index("image_filename").join(img_df.set_index("image_filename"))
 print(df.shape)
 print(df.columns)
 
 df = df.reset_index()
 df.head()
-
-
 # -
+
+list(df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed']].dtypes)
+
+
+# +
+def cast_to_list(x):
+    if x:
+        return [float(num) for num in x[1:-1].replace("\n", "").split(" ") if num]
+    else:
+        return None
+
+for column in ['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]:
+    df[column] = df[column].apply(cast_to_list)
+# -
+
+df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]].isnull().describe()
+
 
 # ## Perform aggregations
 
@@ -70,6 +93,11 @@ def max_with_nans(series):
         return -1.0
     else:
         return float(result) if isinstance(result, bool) else result
+    
+def reduce_medoid(series):
+    series = np.array([row for row in series.to_numpy()])
+    dist_matrix = scipy.spatial.distance_matrix(series, series)    
+    return tuple(series[np.argmin(dist_matrix.sum(axis=0))])
 
 agg_df = df.groupby("video_id").agg(
     trending_date=("trending_date", lambda s : len(set(s))), # how many days this video was trending,
@@ -112,6 +140,7 @@ agg_df = df.groupby("video_id").agg(
     description_uppercase_ratio=("description_uppercase_ratio", "mean"),
     description_url_count=("description_url_count", "median"),
     description_top_domains_count=("description_top_domains_count", "median"),
+    description_emojis_counts = ('emojis_counts', "median"),
     
     has_detection=("has_detection", max_with_nans),
     person_detected=("person_detected", max_with_nans),
@@ -130,7 +159,18 @@ agg_df = df.groupby("video_id").agg(
     hue_median=("hue_median", "median"),
     saturation_median=("saturation_median", "median"),
     value_median=("value_median", "median"),
-    edges=("edges", "median")
+    edges=("edges", "median"),
+    
+    ocr_length_tokens=('thumbnail_ocr_length', "median"),
+    angry_count=('angry_count', "median"),
+    surprise_count=('surprise_count', "median"),
+    fear_count=('fear_count', "median"),
+    happy_count=('happy_count', "median"),
+    
+    embed_title=('title_embed', reduce_medoid), 
+    embed_channel_title=('channel_title_embed', reduce_medoid),
+    embed_transormed_tags=('transormed_tags_embed', reduce_medoid), 
+    embed_thumbnail_ocr=('thumbnail_ocr_embed', reduce_medoid),
 )
 agg_df.head()
 # -
@@ -141,6 +181,7 @@ agg_df.head()
 agg_df_histograms = agg_df[[cname for cname in agg_df.columns if 'histogram' in cname]]
 agg_df_numeric = agg_df[[cname for idx, cname in enumerate(agg_df.columns) if agg_df.dtypes[idx] in [np.int64, np.float64]]]
 agg_df_not_numeric = agg_df[[cname for idx, cname in enumerate(agg_df.columns) if agg_df.dtypes[idx] not in [np.int64, np.float64]]]
+agg_df_embeddings = agg_df[[cname for cname in agg_df.columns if cname.startswith('embed_')]]
 
 categories_df = agg_df[~agg_df["category_id"].isna()]
 categories_df.shape
@@ -164,7 +205,9 @@ stats
 import matplotlib.pyplot as plt
 
 std_deviations = stats.loc["std", :].sort_values(ascending=False)
-std_deviations.plot.bar(figsize=(14, 7), rot=80)
+std_plot = std_deviations.plot.bar(figsize=(14, 7), rot=80)
+std_plot.get_figure().savefig("std_dev.pdf")
+std_plot.plot()
 # -
 
 std_deviations[ std_deviations < 0.1 ]
@@ -193,11 +236,13 @@ xxx = ax.set_xticklabels(
 )
 # -
 
+ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_all.pdf"))
+
 # ## Let's go deeper
 # ### Visual attributes
 
 # +
-visual_words = ['detect', 'face', 'gray', 'hue', 'saturation', 'value', 'edges']
+visual_words = ['detect', 'face', 'gray', 'hue', 'saturation', 'value', 'edges', "ocr_length_tokens", "angry_count", "surprise_count", "fear_count", "happy_count"]
 select_columns = [cname for cname in agg_df_numeric.columns if any([word in cname for word in visual_words])]
 
 select_df = agg_df_numeric[select_columns]
@@ -218,6 +263,8 @@ xxx = ax.set_xticklabels(
     horizontalalignment='right'
 )
 # -
+
+ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_visual.pdf"))
 
 # ## Title, Channel Title + Description attributes
 
@@ -243,6 +290,8 @@ xxx = ax.set_xticklabels(
 )
 # -
 
+ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_desc.pdf"))
+
 # ## Print most and least correlated feature for each column
 
 # +
@@ -262,9 +311,68 @@ for idx, cname in enumerate(corr.index):
     print(cname, '-', corr.index[furthest_idx], ' : ', min_corr)
     
     print()
-
-
 # -
+
+# ### Embeddings comparison
+
+for column_name in agg_df_embeddings.columns:
+    print(column_name)
+    agg_df_embeddings[column_name + "_argmax"] = agg_df_embeddings[column_name].copy().apply(np.argmax).copy()
+
+agg_df_embeddings.columns
+
+
+def cramers_corrected_stat(confusion_matrix):
+    """ calculate Cramers V statistic for categorial-categorial association.
+        uses correction from Bergsma and Wicher, 
+        Journal of the Korean Statistical Society 42 (2013): 323-328
+    """
+    chi2 = ss.chi2_contingency(confusion_matrix)[0]
+    n = confusion_matrix.sum()
+    phi2 = chi2/n
+    r,k = confusion_matrix.shape
+    phi2corr = max(0, phi2 - ((k-1)*(r-1))/(n-1))    
+    rcorr = r - ((r-1)**2)/(n-1)
+    kcorr = k - ((k-1)**2)/(n-1)
+    return np.sqrt(phi2corr / min( (kcorr-1), (rcorr-1)))
+
+
+max_embed_column_names = [colname for colname in agg_df_embeddings.columns if colname.endswith("_argmax")]
+corr = []
+for column_name in max_embed_column_names:
+    corr.append([])
+    for column_name_2 in max_embed_column_names:
+        confusion_matrix = pd.crosstab(agg_df_embeddings[column_name], agg_df_embeddings[column_name_2]).values
+        # print(confusion_matrix)
+        corr[-1].append(cramers_corrected_stat(confusion_matrix))
+
+corr
+
+# +
+ax = sns.heatmap(
+    corr, 
+    vmin=-1, vmax=1, center=0,
+    cmap=sns.diverging_palette(20, 220, n=200),
+    square=True,
+    annot=True,
+    xticklabels=max_embed_column_names,
+    yticklabels=max_embed_column_names
+)
+
+xxx = ax.set_xticklabels(
+    ax.get_xticklabels(),
+    rotation=45,
+    horizontalalignment='right'
+)
+
+yxx = ax.set_yticklabels(
+    ax.get_yticklabels(),
+    rotation=0,
+)
+# -
+
+ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_embed.pdf"))
+
 
 # ### "Flatten" histogram values into columns
 
@@ -340,8 +448,8 @@ fit = selector.fit(X, y)
 print(fit.scores_)
 features = fit.transform(X)
 
-cols = selector.get_support(indices=True)
-print(list(X_columns[cols]))
+cols = selecport(indices=True)
+print(list(X_columns[coltor.get_sups]))
 
 X_indices = np.arange(X.shape[-1])
 plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
