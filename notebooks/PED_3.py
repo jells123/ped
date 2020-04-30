@@ -23,12 +23,14 @@ import scipy.spatial
 import scipy.stats as ss
 
 FIGURES_DIR=os.path.join('..', 'figures')
-# -
 
+# +
 text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
 img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv'))
+
 img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv'))
 text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
+# -
 
 # #### Text DF preview
 
@@ -511,3 +513,152 @@ plt.xlabel("Number of features selected")
 plt.ylabel("Cross validation score (nb of correct classifications)")
 plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
 plt.show()
+# -
+
+# # Try more features on text data
+
+# ### Test `CountVectorizer` and `TfIdfVectorizer` in terms of distinguishing between categories
+
+# +
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
+vectorizer = TfidfVectorizer(stop_words='english')
+vectors = vectorizer.fit_transform(np.unique(df["title"].values))
+
+def top_tfidf_scores(corpus, n=15):
+    # http://stackoverflow.com/questions/16078015/
+    MAX_DF = 0.3 if len(corpus) > 10 else 1.0
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=100, max_df=MAX_DF, sublinear_tf=True)
+    tfidf_result = vectorizer.fit_transform(corpus)
+    
+    scores = zip(vectorizer.get_feature_names(),
+                 np.asarray(tfidf_result.sum(axis=0)).ravel())
+    sorted_scores = sorted(scores, key=lambda x: x[1], reverse=True)
+    return sorted_scores[:n]
+
+top_tfidf_scores(np.unique(df["title"].values))
+
+
+# +
+def get_top_n_words(corpus, n=None):
+    vec = CountVectorizer(stop_words='english').fit(corpus)
+    bag_of_words = vec.transform(corpus)
+    sum_words = bag_of_words.sum(axis=0) 
+    words_freq = [(word, sum_words[0, idx]) for word, idx in     vec.vocabulary_.items()]
+    words_freq =sorted(words_freq, key = lambda x: x[1], reverse=True)
+    return words_freq[:n]
+
+titles = np.unique(df["title"].values)
+get_top_n_words(titles, n=20)
+# -
+
+# ### Top `TITLE` words by counts, per category
+
+for i in df["category_id"].value_counts().keys():
+    titles = np.unique(df[df["category_id"] == i]["title"].values)
+    print("\n\t>>> CATEGORY ", i, " -> ", len(titles))
+    for w in get_top_n_words(titles, n=10):
+        print(w)
+
+# ### Top `TITLE` words by Tf IDF score, per category
+
+for i in df["category_id"].value_counts().keys():
+    titles = np.unique(df[df["category_id"] == i]["title"].values)
+    print("\n\t>>> CATEGORY ", i, " -> ", len(titles))
+    for w in top_tfidf_scores(titles, n=10):
+        print(w)
+
+# ### Select title-specific words to construct bag-of-words 
+# (very small vocabulary)
+#
+# ### Construct one-hot vectors over this small vocabulary as a new feature
+
+# +
+titles_bow = []
+N = 30
+
+for i in df["category_id"].value_counts().keys():
+    titles = np.unique(df[df["category_id"] == i]["title"].values)
+    titles_bow.extend(w[0] for w in get_top_n_words(titles, n=N))
+    titles_bow.extend(w[0] for w in top_tfidf_scores(titles, n=N))
+
+titles_bow = list(sorted(set(titles_bow)))
+
+def onehot_encode(x, BOW):
+    x_lower = x.lower()
+    result = np.zeros(shape=len(BOW), dtype=np.uint8)
+    for idx, w in enumerate(BOW):
+        if w in x_lower:
+            result[idx] += 1
+    return result
+
+titles_onehot = []
+df["title_onehot"] = df["title"].apply(lambda x : onehot_encode(x, titles_bow))
+
+bow_agg_df = df.groupby("video_id").agg(
+    title_onehot=("title_onehot", reduce_histogram),
+    category_id=("category_id", lambda s : max(s)),
+).reset_index()
+bow_agg_df.head()
+
+# +
+from sklearn.decomposition import PCA
+
+bow_data = np.stack(bow_agg_df["title_onehot"].values, axis=0)
+print(bow_data.shape)
+
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(bow_data)
+
+plt.scatter(X_pca[:, 0], X_pca[:, 1], c=bow_agg_df["category_id"].fillna(0).values)
+# -
+
+category_id_indices = bow_agg_df.index[~bow_agg_df["category_id"].isna()].tolist()
+plt.scatter(X_pca[category_id_indices, 0], X_pca[category_id_indices, 1], c=bow_agg_df.loc[category_id_indices, "category_id"])
+
+# ### Top `TAGS` words by counts, per category
+
+for i in df["category_id"].value_counts().keys():
+    titles = np.unique(df[df["category_id"] == i]["tags"].values)
+    print("\n\t>>> CATEGORY ", i, " -> ", len(titles))
+    for w in get_top_n_words(titles, n=10):
+        print(w)
+
+# ### Top `tags` words by TF IDF score, per category
+
+for i in df["category_id"].value_counts().keys():
+    tags = np.unique(df[df["category_id"] == i]["tags"].values)
+    print("\n\t>>> CATEGORY ", i, " -> ", len(tags))
+    for w in top_tfidf_scores(tags, n=10):
+        print(w)
+
+# +
+tags_bow = []
+N = 30
+
+for i in df["category_id"].value_counts().keys():
+    tags = np.unique(df[df["category_id"] == i]["tags"].values)
+    tags_bow.extend(w[0] for w in get_top_n_words(tags, n=N))
+    tags_bow.extend(w[0] for w in top_tfidf_scores(tags, n=N))
+
+tags_bow = list(sorted(set(tags_bow)))
+
+tags_onehot = []
+df["tags_onehot"] = df["tags"].apply(lambda x : onehot_encode(x, tags_bow))
+
+bow_agg_df = df.groupby("video_id").agg(
+    title_onehot=("title_onehot", reduce_histogram),
+    tags_onehot=("tags_onehot", reduce_histogram),
+    category_id=("category_id", lambda s : max(s)),
+).reset_index()
+bow_agg_df.head()
+
+# +
+bow_data = np.stack(bow_agg_df["tags_onehot"].values, axis=0)
+print(bow_data.shape)
+
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(bow_data)
+
+plt.scatter(X_pca[:, 0], X_pca[:, 1], c=bow_agg_df["category_id"].fillna(0).values)
