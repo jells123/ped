@@ -23,12 +23,14 @@ import scipy.spatial
 import scipy.stats as ss
 
 FIGURES_DIR=os.path.join('..', 'figures')
-# -
 
+# +
 text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
 img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv'))
+
 img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv'))
 text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
+# -
 
 # #### Text DF preview
 
@@ -430,7 +432,7 @@ categories_df_numeric = transform_histogram_df(categories_df)
 categories_df_numeric = categories_df_numeric[[cname for idx, cname in enumerate(categories_df_numeric.columns) if categories_df_numeric.dtypes[idx] in [np.int64, np.float64]]]
 
 y = categories_df_numeric["category_id"].values
-X = categories_df_numeric.drop(columns=["category_id"]).fillna(-1.0)
+X = categories_df_numeric.drop(columns=["category_id", "trending_date"]).fillna(-1.0)
 X = (X - X.min()) / (X.max()-X.min()+1e-12) # normalize values - how about those that are missing?
 
 X_columns = X.columns
@@ -441,15 +443,15 @@ X.shape
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import f_classif
 
-selector = SelectKBest(score_func=f_classif, k=15)
+selector = SelectKBest(score_func=f_classif, k=20)
 fit = selector.fit(X, y)
 
 # summarize scores
 print(fit.scores_)
 features = fit.transform(X)
 
-cols = selecport(indices=True)
-print(list(X_columns[coltor.get_sups]))
+cols = selector.get_support(indices=True)
+print(list(X_columns[cols]))
 
 X_indices = np.arange(X.shape[-1])
 plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
@@ -461,7 +463,7 @@ plt.xticks(rotation=45)
 # +
 from sklearn.feature_selection import chi2
 
-selector = SelectKBest(score_func=chi2, k=10)
+selector = SelectKBest(score_func=chi2, k=20)
 fit = selector.fit(X, y)
 
 # summarize scores
@@ -478,7 +480,7 @@ X_indices = np.arange(X.shape[-1])
 # +
 from sklearn.feature_selection import mutual_info_classif
 
-selector = SelectKBest(score_func=mutual_info_classif, k=10)
+selector = SelectKBest(score_func=mutual_info_classif, k=20)
 fit = selector.fit(X, y)
 
 # summarize scores
@@ -511,3 +513,5 @@ plt.xlabel("Number of features selected")
 plt.ylabel("Cross validation score (nb of correct classifications)")
 plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
 plt.show()
+
+print(X_columns[rfecv.get_support(indices=True)])
