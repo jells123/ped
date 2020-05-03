@@ -78,6 +78,103 @@ for column in ['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_em
 
 df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]].isnull().describe()
 
+# ## More textual features -> TF, TF IDF based
+
+# +
+import csv
+
+categories = {}
+with open(os.path.join('..', 'data', 'categories.csv')) as csv_file:
+    csv_reader = csv.reader(csv_file, delimiter=';')
+    
+    line_count = 0
+    for row in csv_reader:
+        if line_count == 0:
+            line_count += 1
+            continue
+        else:
+            categories[int(row[0])] = row[1]
+        line_count += 1
+        
+    print(f'Processed {line_count} lines.')
+
+# +
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
+vectorizer = TfidfVectorizer(stop_words='english')
+vectors = vectorizer.fit_transform(np.unique(df["title"].values))
+
+def top_tfidf_scores(corpus, n=15):
+    # http://stackoverflow.com/questions/16078015/
+    MAX_DF = 0.3 if len(corpus) > 10 else 1.0
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=100, max_df=MAX_DF, sublinear_tf=True)
+    tfidf_result = vectorizer.fit_transform(corpus)
+    
+    scores = zip(vectorizer.get_feature_names(),
+                 np.asarray(tfidf_result.sum(axis=0)).ravel())
+    sorted_scores = sorted(scores, key=lambda x: x[1], reverse=True)
+    return sorted_scores[:n]
+
+def get_top_n_words(corpus, n=None):
+    vec = CountVectorizer(stop_words='english').fit(corpus)
+    bag_of_words = vec.transform(corpus)
+    sum_words = bag_of_words.sum(axis=0) 
+    words_freq = [(word, sum_words[0, idx]) for word, idx in     vec.vocabulary_.items()]
+    words_freq =sorted(words_freq, key = lambda x: x[1], reverse=True)
+    return words_freq[:n]
+
+titles_bow = []
+N = 30
+
+for i in df["category_id"].value_counts().keys():
+    titles = np.unique(df[df["category_id"] == i]["title"].values)
+    titles_bow.extend(w[0] for w in get_top_n_words(titles, n=N))
+    titles_bow.extend(w[0] for w in top_tfidf_scores(titles, n=N))
+
+titles_bow = list(sorted(set(titles_bow)))
+
+def onehot_encode(x, BOW):
+    x_lower = x.lower()
+    result = np.zeros(shape=len(BOW), dtype=np.uint8)
+    for idx, w in enumerate(BOW):
+        if w in x_lower:
+            result[idx] += 1
+    return result
+
+titles_onehot = []
+df["title_onehot"] = df["title"].apply(lambda x : onehot_encode(x, titles_bow))
+
+# +
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+sns.set(rc={'figure.figsize':(18, 14)})
+
+bow_agg_df = df.groupby("video_id").agg(
+    title_onehot=("title_onehot", reduce_histogram),
+    category_id=("category_id", lambda s : max(s)),
+).reset_index()
+
+X = np.stack(bow_agg_df["title_onehot"].values, axis=0)
+pca = PCA(n_components=20)
+X_pca = pca.fit_transform(X)
+
+sns.scatterplot(
+    x='c1', 
+    y='c2',
+      hue='category',
+    size='has_category',
+    data=pd.DataFrame({
+      'c1': X_pca[:, 0],
+      'c2': X_pca[:, 1],
+      'category': list(map(lambda x : categories.get(int(x), "undefined"), bow_agg_df.fillna(0)["category_id"].values)),
+        'has_category': list(map(lambda x : 1 if x == -1 else 15, bow_agg_df.fillna(-1)["category_id"].values))
+  })); 
+
+
+# -
 
 # ## Perform aggregations
 
@@ -129,6 +226,7 @@ agg_df = df.groupby("video_id").agg(
     title_uppercase_ratio=("title_uppercase_ratio", "mean"),
     title_not_alnum_ratio=("title_not_alnum_ratio", "mean"),
     title_common_chars_count=("title_common_chars_count", "median"),
+#     title_onehot=("title_onehot", reduce_histogram),
     
     channel_title_length_chars=("channel_title_length_chars", "median"),
     channel_title_length_tokens=("channel_title_length_tokens", "median"),
@@ -174,7 +272,10 @@ agg_df = df.groupby("video_id").agg(
     embed_transormed_tags=('transormed_tags_embed', reduce_medoid), 
     embed_thumbnail_ocr=('thumbnail_ocr_embed', reduce_medoid),
 )
+
+agg_df["title_onehot"] = list(map(list, X_pca))
 agg_df.head()
+
 # -
 
 # ### Extract subsets: numeric columns, non-numeric, histograms and videos with category_id given
@@ -219,7 +320,6 @@ std_deviations[ std_deviations < 0.1 ]
 
 # +
 import seaborn as sns
-sns.set(rc={'figure.figsize':(18, 14)})
 
 corr = agg_df_numeric[[
     cname for cname in agg_df_numeric.columns if cname not in ["trending_date", "category_id"]]
@@ -421,14 +521,25 @@ stats = normalized_df.describe()
 
 std_deviations = stats.loc["std", :].sort_values(ascending=False)
 std_deviations.plot.bar(figsize=(14, 7), rot=45)
+
+
 # -
 
 # > Feature selection is performed using ANOVA F measure via the f_classif() function.
 
 # +
-print(categories_df.shape)
+def transform_onehot_df(df):
+    for cname in df.columns:
+        if 'onehot' in cname:
+            prefix = cname.split('_')[0]
+            for i in range(len(df[cname].values[0])):
+                df[f"{prefix}_{i}_bin"] = df[cname].apply(lambda x : x[i])
+            df = df.drop(columns=[cname])
+    return df
 
 categories_df_numeric = transform_histogram_df(categories_df)
+categories_df_numeric = transform_onehot_df(categories_df)
+
 categories_df_numeric = categories_df_numeric[[cname for idx, cname in enumerate(categories_df_numeric.columns) if categories_df_numeric.dtypes[idx] in [np.int64, np.float64]]]
 
 y = categories_df_numeric["category_id"].values
@@ -515,3 +626,15 @@ plt.plot(range(1, len(rfecv.grid_scores_) + 1), rfecv.grid_scores_)
 plt.show()
 
 print(X_columns[rfecv.get_support(indices=True)])
+
+# +
+print(agg_df.shape)
+
+agg_df_transformed = transform_histogram_df(agg_df)
+agg_df_transformed = transform_onehot_df(agg_df_transformed)
+
+print(agg_df_transformed.columns, agg_df_transformed.shape)
+
+# -
+
+agg_df_transformed.to_csv("aggregated.csv")
