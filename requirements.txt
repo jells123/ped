@@ -17,3 +17,7 @@ face_recognition
 
 mkl
 ipykernel
+nlopt
+google-api-python-client
+google-auth-oauthlib 
+google-auth-httplib2
