@@ -118,6 +118,10 @@ SELECT_FEATURES = list(set([*ANOVA_BEST[:N], *CHI2_BEST[:N], *MI_BEST[:N], *RFEC
 len(SELECT_FEATURES), len(agg_df.columns)
 # -
 
+# #### Just out of curiosity, we also decided to skip all `title_x_bin` features, which we created by applying PCA over simplified Bag-of-words representation (the change is included in `PED_3`. Therefore, we keep all the other features, also title-related, but skip this particular one.
+
+LESS_FEATURES = [feat for feat in SELECT_FEATURES if not (feat.startswith('title') and feat.endswith('bin'))]
+
 # ## Apply PCA over SELECTED FEATURES
 
 # +
@@ -126,6 +130,13 @@ normalized_df = (select_features_df - select_features_df.mean()) / select_featur
 
 X_all = normalized_df.values
 y_all = list(map(int, agg_df.fillna(-1).loc[:, "category_id"].values))
+
+# * LESS
+less_features_df = agg_df_numeric.fillna(0)[LESS_FEATURES]
+lnormalized_df = (less_features_df - less_features_df.mean()) / less_features_df.std()
+
+X_all_less = lnormalized_df.values
+# / LESS
 
 pca_all = PCA(n_components=5)
 X_pca_all = pca_all.fit_transform(X_all)
@@ -148,6 +159,10 @@ sns.scatterplot(
 labeled_idx = agg_df.index[~agg_df["category_id"].isna()].tolist()
 X = normalized_df.loc[labeled_idx, :].values
 y = list(map(int, agg_df.loc[labeled_idx, "category_id"].values))
+
+# * LESS
+X_less = lnormalized_df.loc[labeled_idx, :].values
+# / LESS
 
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X)
@@ -207,21 +222,21 @@ print("self-learning log.reg. score", ssmodel.score(X, y))
 from sklearn.semi_supervised import LabelSpreading
 
 # label_spread = LabelSpreading(kernel='knn', alpha=0.8, max_iter=1000)
-label_spread = LabelSpreading(kernel='knn', alpha=0.2, max_iter=1000)
+label_spread = LabelSpreading(kernel='knn', alpha=0.2)
 
 label_spread.fit(X_all, y_all)
 
-# +
 from sklearn.metrics import plot_confusion_matrix
 from sklearn.metrics import confusion_matrix, classification_report
 
 y_pred = label_spread.predict(X)
 cm = confusion_matrix(y, y_pred, labels=label_spread.classes_)
+labels_titles = list(map(lambda x : categories.get(x, '?'), label_spread.classes_))
 
-print(classification_report(y, y_pred))
+print(classification_report(y, y_pred, target_names=labels_titles))
 
 disp = plot_confusion_matrix(label_spread, X, y,
-                                 display_labels=label_spread.classes_,
+                              display_labels=labels_titles,
                                  cmap=plt.cm.Blues)
 # -
 
@@ -244,8 +259,6 @@ sns.scatterplot(
 # +
 from scipy import stats
 
-# #############################################################################
-# Calculate uncertainty values for each transduced distribution
 pred_entropies = stats.distributions.entropy(label_spread.label_distributions_.T)
 print(pred_entropies.shape)
 
@@ -277,7 +290,7 @@ transductions_entropies = list(zip(
 
 for c in label_spread.classes_:
     print("\nCATEGORY", categories.get(c))
-    print(">>> SUPPORT: ", len(list(filter(lambda x : x == c, y_all))), "\n")
+    print(">>> SUPPORT: ", len(list(filter(lambda x : x == c, label_spread.transduction_))), "\n")
     
     t_e_per_class = list(filter(lambda x : x[0] == c, transductions_entropies))
     t_e_per_class = list(sorted(t_e_per_class, key=lambda x : -1*x[1]))
@@ -302,7 +315,7 @@ transductions_entropies = list(zip(
 
 for c in label_spread.classes_:
     print("\nCATEGORY", categories.get(c))
-    print(">>> SUPPORT: ", len(list(filter(lambda x : x == c, y_all))), "\n")
+    print(">>> SUPPORT: ", len(list(filter(lambda x : x == c, label_spread.transduction_))), "\n")
     
     t_e_per_class = list(filter(lambda x : x[0] == c, transductions_entropies))
     t_e_per_class = list(sorted(t_e_per_class, key=lambda x : x[1]))
@@ -317,4 +330,27 @@ for c in label_spread.classes_:
 
 # -
 
+# # * 
+#
+# ## Running LabelSpreading on less features yields better results !!!
 
+# +
+label_spread = LabelSpreading(kernel='knn', alpha=0.2)
+
+label_spread.fit(X_all_less, y_all)
+
+y_pred = label_spread.predict(X_less)
+cm = confusion_matrix(y, y_pred, labels=label_spread.classes_)
+labels_titles = list(map(lambda x : categories.get(x, '?'), label_spread.classes_))
+
+print(classification_report(y, y_pred, target_names=labels_titles))
+
+disp = plot_confusion_matrix(label_spread, X_less, y,
+                              display_labels=labels_titles,
+                                 cmap=plt.cm.Blues)
+# -
+
+# ### What is the distribution of newly assigned labels?
+
+chart = sns.countplot([categories.get(x) for x in label_spread.transduction_])
+_ = chart.set_xticklabels(chart.get_xticklabels(), rotation=45, horizontalalignment='right')
