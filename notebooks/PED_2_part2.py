@@ -1,11 +1,11 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
+#       format_name: percent
+#       format_version: '1.3'
 #       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
@@ -13,7 +13,7 @@
 #     name: python3
 # ---
 
-# +
+# %%
 import os
 
 # Disable GPU
@@ -28,7 +28,7 @@ files = os.listdir(path)
 files
 
 
-# +
+# %%
 import pandas as pd
 
 pd.set_option("colwidth", None)
@@ -37,19 +37,23 @@ GB_videos_df = pd.read_csv(path + "/" + "GB_videos_5p.csv", sep=";", engine="pyt
 US_videos_df = pd.read_csv(path + "/" + "US_videos_5p.csv", sep=";", engine="python")
 
 df = pd.concat([GB_videos_df, US_videos_df]).drop_duplicates().reset_index(drop=True)
-# -
 
+# %%
 df.columns
 
+# %%
 len(df['thumbnail_link'].unique()), len(df['thumbnail_link'])
 
+# %%
 df['video_id'].head()
 
+# %% [markdown]
 # # Thumbnails analysis
 
+# %% [markdown]
 # ## Downloading images
 
-# +
+# %%
 images_path = os.path.join(path, "images")
 try:
     os.mkdir(images_path)
@@ -95,11 +99,11 @@ def download_urls(urls, images_path, url2filename_func):
 
 if DOWNLOAD_IMAGES:
      download_urls(URLs, images_path, url2filename)
-# -
+# %% [markdown]
 # ## Text recognition
 
 
-# +
+# %%
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import keras_ocr
@@ -119,21 +123,24 @@ def allow_memory_growth():
             print(e)
 # run the line below if you're using local runtime and have GTX > 1660 (this is known bug with tensorflow memory allocation)
 allow_memory_growth()
-# -
 
+# %%
 pipeline = keras_ocr.pipeline.Pipeline()
 
 
+# %%
 data_dir = pathlib.Path(images_path)
 print(data_dir)
 
+# %%
 image_count = len(list(data_dir.glob('*.jpg')))
 image_count
 
+# %%
 list_ds = tf.data.Dataset.list_files(str(data_dir/'*'))
 
 
-# +
+# %%
 AUTOTUNE = 10
 BATCH_SIZE = 100
 IMG_WIDTH, IMG_HEIGHT = 90, 120
@@ -155,7 +162,7 @@ ds = list_ds.map(process_path) # , num_parallel_calls=AUTOTUNE)
 ds = ds.batch(BATCH_SIZE)
 ds = ds.repeat()
 
-# +
+# %%
 import json
 ocr_file_path = os.path.join(path, 'filename2text.json')
 def genarete_texts_dict(ds, num_steps):
@@ -177,15 +184,17 @@ if GENERATE_OCR:
 else:
     with open(ocr_file_path, 'r') as f:
         filename2text = json.load(f)
-# -
 
+# %% [markdown]
 # ### Correcting words
 #
 # #### Create known words from descriptions
 
+# %%
 descriptions_path = os.path.join(path, 'descriptions.csv')
 df['description '].to_csv(descriptions_path, index=False, sep=" ")
 
+# %%
 import re 
 preprocessed_descriptions = pd.Series([
     " ".join([word for word in re.split(r"[^a-zA-Z]", sentence.replace("\\n", " ")) if len(word) < 15 and len(word) > 2])
@@ -193,15 +202,16 @@ preprocessed_descriptions = pd.Series([
 ])
 preprocessed_descriptions.to_csv(descriptions_path, index=False, sep=" ")
 
-# +
+# %%
 from spellchecker import SpellChecker
 
 spell = SpellChecker()
 spell.word_frequency.load_text_file(descriptions_path)
-# -
 
+# %%
 spell.word_frequency._longest_word_length
 
+# %%
 import timeit
 thumbnails_path = os.path.join(path, 'corrected_thumbnail.json')
 start = timeit.default_timer()
@@ -223,12 +233,14 @@ else:
     with open(thumbnails_path) as fp:
         result = json.load(fp)
 
+# %%
 list(result.keys())[:3], list(filename2text.keys())[:3]
 
 
+# %% [markdown]
 # #### Visualization of results
 
-# +
+# %%
 def show_batch(image_batch, labels=None):
     plt.figure(figsize=(10,10))
     for n in range(25):
@@ -245,19 +257,20 @@ image_batch, filenames = next(iter(ds))
 show_batch(image_batch.numpy(), [result[str(filename).split("/")[-1][:-5]] for filename in filenames[:25].numpy()])
 
 
-# +
+# %%
 def url2filename_hq(url):
     url = url.replace("default.jpg", "hqdefault.jpg")
     return result[url2filename(url)[:-4]] if url2filename(url)[:-4] in result else ""
 
 df['thumbnail_ocr'] = df['thumbnail_link'].map(url2filename_hq)
-# -
 
+# %%
 df['thumbnail_ocr'].describe(), list(result.keys())[:4]
 
+# %% [markdown]
 # #### Apply text processing
 
-# +
+# %%
 import io
 import os
 
@@ -268,8 +281,7 @@ import numpy as np
 tf.__version__
 
 
-# -
-
+# %%
 #  encoder = info.features['text'].encoder
 def write_embedding_files(labels, embedded_ndarray, path=path, prefix=""):
     out_v = io.open(os.path.join(path, f"{prefix}_vecs.tsv"), "w", encoding="utf-8")
@@ -282,10 +294,11 @@ def write_embedding_files(labels, embedded_ndarray, path=path, prefix=""):
     out_m.close()
 
 
+# %%
 embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder/4")
 
 
-# +
+# %%
 def calc_embeddings(df, column_names, write_visualizations_files=False):
     extended_df = df
     for column in column_names:
@@ -307,14 +320,14 @@ def calc_embeddings(df, column_names, write_visualizations_files=False):
     return extended_df
 
 extended_df = calc_embeddings(df, ["thumbnail_ocr"], True) # , "description" Description doesnt work...
-# -
 
+# %% [markdown]
 # #### OCR lengths
 #
 # > Conclusion: There are a lot of thumbnails without text detected, but median and mean values show that there are aproximately 1 word per image,
 #     which could be informative as well
 
-# +
+# %%
 import seaborn as sns
 import nltk
 nltk.download('punkt')
@@ -327,43 +340,54 @@ for t in df["thumbnail_ocr"].to_numpy():
 print(pd.DataFrame({"length_statistics": lengths}).describe())
 df["thumbnail_ocr_length"] = df["thumbnail_ocr"].apply(lambda x : len(word_tokenize(x)))
 sns.distplot(lengths)
-# -
 
+# %% [markdown]
 # # Emotions analysis
 
+# %%
 import face_recognition
 
+# %%
 image_batch.numpy()[0].shape
 plt.hist(np.reshape(image_batch.numpy(), [-1]))
 
+# %% [markdown]
 # #### First face at the image visualization
 
+# %%
 image_batch, filenames = next(iter(ds))
 plt.imshow(image_batch[0])
 plt.show()
 
+# %%
 image = tf.image.convert_image_dtype(image_batch, tf.uint8).numpy()[0]
 face_locations = face_recognition.face_locations(image, number_of_times_to_upsample=2, model="cnn")
 if face_locations:
     top, right, bottom, left = face_locations[0]
     face_image = image[top:bottom, left:right]
 
+# %%
 plt.imshow(face_image)
 plt.show()
 
+# %%
 from tensorflow.keras.models import load_model
 
+# %%
 face_locations
 
+# %%
 face_recognition_model = load_model(os.path.join(models_path, "face_recognition.hdf5"))
 
+# %% [markdown]
 # #### Detected emotion
 
+# %%
 emotions_map = {'Angry': 0, 'Sad': 5, 'Neutral': 4, 'Disgust': 1, 'Surprise': 6, 'Fear': 2, 'Happy': 3}
 emotions_map_inv = {value: key for key, value in emotions_map.items()}
 emotions_map_inv[np.argmax(face_recognition_model.predict(tf.image.rgb_to_grayscale(tf.image.resize([face_image], [48, 48]))))]
 
-# +
+# %%
 from collections import Counter
 
 def transform_face_image(img):
@@ -393,14 +417,15 @@ def genarete_emotions_counts(ds, num_steps):
                 emotions[key] = Counter()
     return emotions
 emotions_dict = genarete_emotions_counts(ds, int(image_count/BATCH_SIZE) + 1)
-# -
 
+# %%
 len(emotions_dict), emotions_dict[list(emotions_dict.keys())[0]], list(emotions_dict.keys())[0]
 
 
+# %% [markdown]
 # #### Constructing columns
 
-# +
+# %%
 def gen_column_value(thumbnail_url, emotion):
     filename = url2filename(thumbnail_url)[:-4]
     # print(filename)
@@ -417,16 +442,18 @@ for emotion in emotions_map:
         sns.distplot(df[f"{emotion}_count"]).set_title(emotion)
         plt.show()
 
-# -
 
+# %% [markdown]
 # Conlusions
 # > Only some of emotions are present at the images
 
+# %%
 df[['Angry_count', 'Neutral_count', 'Surprise_count', 'Fear_count', 'Happy_count']].describe()
 # #### Emotions visualization
 
 
+# %%
 image_batch, filenames = next(iter(ds))
 show_batch(image_batch.numpy(), [list(emotions_dict[str(filename).split("/")[-1][:-5]].keys()) for filename in filenames[:25].numpy()])
 
-
+# %%
