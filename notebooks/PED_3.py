@@ -1,11 +1,11 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
+#       format_name: percent
+#       format_version: '1.3'
 #       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
@@ -13,9 +13,10 @@
 #     name: python3
 # ---
 
+# %% [markdown]
 # ### Load dataframes with text and visual attributes
 
-# +
+# %%
 import pandas as pd
 import numpy as np
 import os
@@ -24,22 +25,24 @@ import scipy.stats as ss
 
 FIGURES_DIR=os.path.join('..', 'figures')
 
-# +
+# %%
 text_df = pd.read_csv(os.path.join('..', 'data', 'text_attributes_bedzju.csv'))
 img_df = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju.csv'))
 
 img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv'))
 text_df_2 = pd.read_csv(os.path.join('..', 'data', 'text_attributes_nawrba.csv'))
-# -
 
+# %% [markdown]
 # #### Text DF preview
 
+# %%
 print(text_df.shape, img_df_2.shape, text_df_2.shape)
 text_df.head()
 
+# %% [markdown]
 # #### Visual DF preview
 
-# +
+# %%
 # need to convert 'list strings' into numpy arrays
 for cname in img_df.columns:
     if 'histogram' in cname:
@@ -47,11 +50,11 @@ for cname in img_df.columns:
 
 print(img_df.shape)
 img_df.head()
-# -
 
+# %% [markdown]
 # ### Join dataframes with visual and text attributes
 
-# +
+# %%
 text_df["image_filename"] = text_df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
 
 df = pd.concat([text_df, text_df_2, img_df_2], axis=1).set_index("image_filename").join(img_df.set_index("image_filename"))
@@ -60,12 +63,12 @@ print(df.columns)
 
 df = df.reset_index()
 df.head()
-# -
 
+# %%
 list(df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed']].dtypes)
 
 
-# +
+# %%
 def cast_to_list(x):
     if x:
         return [float(num) for num in x[1:-1].replace("\n", "").split(" ") if num]
@@ -74,13 +77,14 @@ def cast_to_list(x):
 
 for column in ['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]:
     df[column] = df[column].apply(cast_to_list)
-# -
 
+# %%
 df[['channel_title_embed', 'transormed_tags_embed', 'thumbnail_ocr_embed', "title_embed"]].isnull().describe()
 
+# %% [markdown]
 # ## More textual features -> TF, TF IDF based
 
-# +
+# %%
 import csv
 
 categories = {}
@@ -98,7 +102,7 @@ with open(os.path.join('..', 'data', 'categories.csv')) as csv_file:
         
     print(f'Processed {line_count} lines.')
 
-# +
+# %%
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
@@ -145,10 +149,17 @@ def onehot_encode(x, BOW):
 titles_onehot = []
 df["title_onehot"] = df["title"].apply(lambda x : onehot_encode(x, titles_bow))
 
-# +
+# %%
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+def reduce_histogram(series):
+    series = list(filter(lambda x : not isinstance(x, float), series))
+    if series:
+        return tuple(np.mean(series, axis=0))
+    else:
+        return tuple(np.zeros(5)-1.0)
 
 sns.set(rc={'figure.figsize':(18, 14)})
 
@@ -174,18 +185,10 @@ sns.scatterplot(
   })); 
 
 
-# -
-
+# %% [markdown]
 # ## Perform aggregations
 
-# +
-def reduce_histogram(series):
-    series = list(filter(lambda x : not isinstance(x, float), series))
-    if series:
-        return tuple(np.mean(series, axis=0))
-    else:
-        return tuple(np.zeros(5)-1.0)
-
+# %%
 def max_with_nans(series):
     result = max(series)
     if np.isnan(result):
@@ -276,49 +279,57 @@ agg_df = df.groupby("video_id").agg(
 agg_df["title_onehot"] = list(map(list, X_pca))
 agg_df.head()
 
-# -
 
+# %% [markdown]
 # ### Extract subsets: numeric columns, non-numeric, histograms and videos with category_id given
 
-# +
+# %%
 agg_df_histograms = agg_df[[cname for cname in agg_df.columns if 'histogram' in cname]]
 agg_df_numeric = agg_df[[cname for idx, cname in enumerate(agg_df.columns) if agg_df.dtypes[idx] in [np.int64, np.float64]]]
 agg_df_not_numeric = agg_df[[cname for idx, cname in enumerate(agg_df.columns) if agg_df.dtypes[idx] not in [np.int64, np.float64]]]
 agg_df_embeddings = agg_df[[cname for cname in agg_df.columns if cname.startswith('embed_')]]
 
-categories_df = agg_df[~agg_df["category_id"].isna()]
-categories_df.shape
-# -
+agg_df_embeddings_numeric = pd.concat([
+    pd.DataFrame(agg_df_embeddings[colname].values.tolist()).add_prefix(colname + '_')
+    for colname in agg_df_embeddings.columns
+], axis=1)
 
+categories_df = pd.concat([agg_df.reset_index(drop=True), agg_df_embeddings_numeric], axis=1)[
+    ~agg_df.reset_index(drop=True)["category_id"].isna()
+]
+categories_df.shape
+
+# %% [markdown]
 # ### Analyze features stats
 # > In order to do so, we normalize all the values into one range: 0-1, so that the variances are more comparable
 
-# +
+# %%
 # normalized_df = (agg_df_numeric - agg_df_numeric.mean()) / agg_df_numeric.std()
 
 normalized_df = (agg_df_numeric - agg_df_numeric.min()) / (agg_df_numeric.max()-agg_df_numeric.min())
 
 stats = normalized_df.describe()
 stats
-# -
 
+# %% [markdown]
 # #### Which columns have the highest variance?
 
-# +
+# %%
 import matplotlib.pyplot as plt
 
 std_deviations = stats.loc["std", :].sort_values(ascending=False)
 std_plot = std_deviations.plot.bar(figsize=(14, 7), rot=80)
 std_plot.get_figure().savefig("std_dev.pdf")
 std_plot.plot()
-# -
 
+# %%
 std_deviations[ std_deviations < 0.1 ]
 
+# %% [markdown]
 # ## Feature corerlations
 # > Using `-1.0` to denote missing values will potentially break the usefulness of correlation coef, so in the next heatmaps we split the features by their 'domain' (text or visual), skipping the missing values. This makes new coefficients more relevant.
 
-# +
+# %%
 import seaborn as sns
 
 corr = agg_df_numeric[[
@@ -336,14 +347,15 @@ xxx = ax.set_xticklabels(
     rotation=45,
     horizontalalignment='right'
 )
-# -
 
+# %%
 ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_all.pdf"))
 
+# %% [markdown]
 # ## Let's go deeper
 # ### Visual attributes
 
-# +
+# %%
 visual_words = ['detect', 'face', 'gray', 'hue', 'saturation', 'value', 'edges', "ocr_length_tokens", "angry_count", "surprise_count", "fear_count", "happy_count"]
 select_columns = [cname for cname in agg_df_numeric.columns if any([word in cname for word in visual_words])]
 
@@ -364,13 +376,14 @@ xxx = ax.set_xticklabels(
     rotation=45,
     horizontalalignment='right'
 )
-# -
 
+# %%
 ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_visual.pdf"))
 
+# %% [markdown]
 # ## Title, Channel Title + Description attributes
 
-# +
+# %%
 select_columns = [cname for cname in agg_df_numeric.columns if any([word in cname for word in ["title", "description"]])]
 
 select_df = agg_df_numeric[select_columns]
@@ -390,13 +403,14 @@ xxx = ax.set_xticklabels(
     rotation=45,
     horizontalalignment='right'
 )
-# -
 
+# %%
 ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_desc.pdf"))
 
+# %% [markdown]
 # ## Print most and least correlated feature for each column
 
-# +
+# %%
 import pandas as pd
 import numpy as np
 
@@ -413,17 +427,20 @@ for idx, cname in enumerate(corr.index):
     print(cname, '-', corr.index[furthest_idx], ' : ', min_corr)
     
     print()
-# -
 
+# %% [markdown]
 # ### Embeddings comparison
 
+# %%
 for column_name in agg_df_embeddings.columns:
     print(column_name)
     agg_df_embeddings[column_name + "_argmax"] = agg_df_embeddings[column_name].copy().apply(np.argmax).copy()
 
+# %%
 agg_df_embeddings.columns
 
 
+# %%
 def cramers_corrected_stat(confusion_matrix):
     """ calculate Cramers V statistic for categorial-categorial association.
         uses correction from Bergsma and Wicher, 
@@ -439,6 +456,7 @@ def cramers_corrected_stat(confusion_matrix):
     return np.sqrt(phi2corr / min( (kcorr-1), (rcorr-1)))
 
 
+# %%
 max_embed_column_names = [colname for colname in agg_df_embeddings.columns if colname.endswith("_argmax")]
 corr = []
 for column_name in max_embed_column_names:
@@ -448,9 +466,10 @@ for column_name in max_embed_column_names:
         # print(confusion_matrix)
         corr[-1].append(cramers_corrected_stat(confusion_matrix))
 
+# %%
 corr
 
-# +
+# %%
 ax = sns.heatmap(
     corr, 
     vmin=-1, vmax=1, center=0,
@@ -471,14 +490,15 @@ yxx = ax.set_yticklabels(
     ax.get_yticklabels(),
     rotation=0,
 )
-# -
 
+# %%
 ax.get_figure().savefig(os.path.join(FIGURES_DIR, "corr_embed.pdf"))
 
 
+# %% [markdown]
 # ### "Flatten" histogram values into columns
 
-# +
+# %%
 def transform_histogram_df(df):
     for cname in df.columns:
         if 'histogram' in cname:
@@ -493,7 +513,7 @@ agg_df_histograms = transform_histogram_df(agg_df[[cname for cname in agg_df.col
 # VERY important, remove -1.0s! 
 agg_df_histograms = agg_df_histograms[agg_df_histograms["gray_0_bin"] != -1.0]
 
-# +
+# %%
 corr = agg_df_histograms.corr()
 ax = sns.heatmap(
     corr, 
@@ -510,11 +530,11 @@ xxx = ax.set_xticklabels(
 
 ax.hlines([0, 5, 10, 15, 20], *ax.get_xlim())
 ax.vlines([0, 5, 10, 15, 20], *ax.get_xlim())
-# -
 
+# %% [markdown]
 # ### Histogram bins variances
 
-# +
+# %%
 normalized_df = (agg_df_histograms - agg_df_histograms.min()) / (agg_df_histograms.max()-agg_df_histograms.min())
 
 stats = normalized_df.describe()
@@ -522,12 +542,15 @@ stats = normalized_df.describe()
 std_deviations = stats.loc["std", :].sort_values(ascending=False)
 std_deviations.plot.bar(figsize=(14, 7), rot=45)
 
-
-# -
-
+# %% [markdown]
 # > Feature selection is performed using ANOVA F measure via the f_classif() function.
 
-# +
+# %%
+categories_df, agg_df_embeddings_numeric
+categories_df.columns
+
+
+# %%
 def transform_onehot_df(df):
     for cname in df.columns:
         if 'onehot' in cname:
@@ -550,9 +573,10 @@ X_columns = X.columns
 X = X.values
 X.shape
 
-# +
+# %%
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import f_classif
+import json
 
 selector = SelectKBest(score_func=f_classif, k=20)
 fit = selector.fit(X, y)
@@ -563,6 +587,8 @@ features = fit.transform(X)
 
 cols = selector.get_support(indices=True)
 print(list(X_columns[cols]))
+with open(os.path.join("..", "data", "anova_best.json"), "w") as fp:
+    json.dump(list(X_columns[cols]), fp)
 
 X_indices = np.arange(X.shape[-1])
 plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
@@ -571,7 +597,7 @@ plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
 plt.xticks(rotation=45)
 
 
-# +
+# %%
 from sklearn.feature_selection import chi2
 
 selector = SelectKBest(score_func=chi2, k=20)
@@ -584,11 +610,14 @@ features = fit.transform(X)
 cols = selector.get_support(indices=True)
 print(list(X_columns[cols]))
 
+with open(os.path.join("..", "data", "chi2_best.json"), "w") as fp:
+    json.dump(list(X_columns[cols]), fp)
+
 X_indices = np.arange(X.shape[-1])
 # plt.bar(X_indices, selector.pvalues_)
 
 
-# +
+# %%
 from sklearn.feature_selection import mutual_info_classif
 
 selector = SelectKBest(score_func=mutual_info_classif, k=20)
@@ -600,8 +629,10 @@ features = fit.transform(X)
 
 cols = selector.get_support(indices=True)
 print(list(X_columns[cols]))
+with open(os.path.join("..", "data", "mi_best.json"), "w") as fp:
+    json.dump(list(X_columns[cols]), fp)
 
-# +
+# %%
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
@@ -627,7 +658,7 @@ plt.show()
 
 print(X_columns[rfecv.get_support(indices=True)])
 
-# +
+# %%
 print(agg_df.shape)
 
 agg_df_transformed = transform_histogram_df(agg_df)
@@ -635,6 +666,16 @@ agg_df_transformed = transform_onehot_df(agg_df_transformed)
 
 print(agg_df_transformed.columns, agg_df_transformed.shape)
 
-# -
 
-agg_df_transformed.to_csv("aggregated.csv")
+# %%
+agg_df_transformed.to_csv(os.path.join("..", "data", "aggregated.csv"))
+
+# %%
+categories_df_numeric[X_columns[rfecv.get_support(indices=True)]].to_csv(os.path.join("..", "data", "selected_features.csv"))
+
+# %% jupyter={"outputs_hidden": false}
+selected = pd.read_csv(os.path.join(os.path.join("..", "data", "selected_features.csv")))
+
+# %% jupyter={"outputs_hidden": false}
+with open(os.path.join("..", "data", "rfecv_best.json"), "w") as fp:
+    json.dump(list(selected.columns)[1:], fp)
