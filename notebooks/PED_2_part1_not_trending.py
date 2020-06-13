@@ -6,48 +6,62 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.4.1
+#       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
 
-# %%
+# %% id="Qox3_kxb_FRa" colab_type="code" outputId="dd728987-c569-46e2-ea13-7fca3d1e348f" colab={"base_uri": "https://localhost:8080/", "height": 272}
+# !pip install imageai
+
+# %% id="wqNfUy3a-FYl" colab_type="code" outputId="26a110dd-22c9-4655-8ab5-68a36ea8dd63" colab={"base_uri": "https://localhost:8080/", "height": 34}
+from google.colab import drive
+drive.mount('/content/drive')
+
+# %% id="X3vWLvUJ-bsU" colab_type="code" outputId="f0cc4830-8733-4dcf-a65c-ded41004714e" colab={"base_uri": "https://localhost:8080/", "height": 34}
+# %tensorflow_version 1.x
+
+# %% id="F2IKQnzr99nn" colab_type="code" outputId="56c6e261-8311-481c-e5e9-401a3ec92de4" colab={"base_uri": "https://localhost:8080/", "height": 578}
 import os
 
 DOWNLOAD_IMAGES = False
 
-path = "../data/"
+path_base = "/content/drive/My Drive/data/PED/"
+path = f"{path_base}data/"
 files = os.listdir(path)
 files
 
 
-# %%
+# %% id="NK3G2pO099oS" colab_type="code" outputId="f8e16ade-351e-4c93-a5b9-dddf66b80c89" colab={"base_uri": "https://localhost:8080/", "height": 71}
 import pandas as pd
 
 
 pd.set_option("colwidth", -1)
 
-GB_videos_df = pd.read_csv(path + "/" + "GB_videos_5p.csv", sep=";", engine="python")
-US_videos_df = pd.read_csv(path + "/" + "US_videos_5p.csv", sep=";", engine="python")
+df = pd.read_csv(os.path.join(path, "videos_not_trending.csv")).drop_duplicates().reset_index(drop=True)
 
-df = pd.concat([GB_videos_df, US_videos_df]).drop_duplicates().reset_index(drop=True)
-
-# %%
+# %% id="ft-kfbPw99od" colab_type="code" outputId="e2125051-1c5e-4ec8-ec3e-32e87ac43f7c" colab={"base_uri": "https://localhost:8080/", "height": 102}
 df.columns
 
-# %%
+# %% id="OY95PQes99ov" colab_type="code" colab={}
+df.thumbnail_link = df.thumbnail_link.apply(lambda x: x.replace("default.jpg", "hqdefault.jpg"))
+
+# %% id="_vsnCzlm99pD" colab_type="code" outputId="0c816a2c-61d3-44a8-b926-bb1ede8d612a" colab={"base_uri": "https://localhost:8080/", "height": 221}
+df.thumbnail_link
+
+# %% id="qNlBsQf899pL" colab_type="code" outputId="a700210b-1e52-405c-9dd1-5cb532c6a701" colab={"base_uri": "https://localhost:8080/", "height": 34}
 len(df['thumbnail_link'].unique()), len(df['thumbnail_link'])
 
-# %%
+# %% id="hP6gbPSF99pg" colab_type="code" outputId="b93df803-9dd5-4e09-d153-a77e203518b4" colab={"base_uri": "https://localhost:8080/", "height": 1000}
 df
 
-# %% [markdown]
+# %% [markdown] id="RzgAdyll99p1" colab_type="text"
 # ## Downloading images
 
-# %%
-images_path = os.path.join(path, "images")
+# %% id="wQS8By7i99p2" colab_type="code" colab={}
+images_path = os.path.join(path, "images2")
 try:
     os.mkdir(images_path)
 except FileExistsError:
@@ -92,11 +106,11 @@ def download_urls(urls, images_path, url2filename_func):
 
 if DOWNLOAD_IMAGES:
      download_urls(URLs, images_path, url2filename)
-# %% [markdown]
+# %% [markdown] id="hrGMTvDa99qN" colab_type="text"
 # ## Images preview
 # > There are 'missing values' in images as well - some thumbnails are default gray picture with a rectangle in the middle
 
-# %%
+# %% id="EGkOKb1N99qO" colab_type="code" outputId="ee32c6fb-9dd3-459f-c405-adc3918a335f" colab={"base_uri": "https://localhost:8080/", "height": 1000}
 # %matplotlib inline
 
 import matplotlib.pyplot as plt
@@ -118,24 +132,16 @@ for i in range(1, columns*rows +1):
     
 plt.show()
 
-# %% [markdown]
-# ### Display default picture
-
-# %%
-default_sample = mpimg.imread(os.path.join(images_path, "https_i.ytimg.comvi_0uV-jMbHQUdefault.jpg"))
-fig = plt.figure(figsize=(3, 3))
-plt.imshow(default_sample)
-print(default_sample.shape)
-
-# %% [markdown]
+# %% [markdown] id="odrfXNXj99qV" colab_type="text"
 # ### Add boolean `has thumbnail` attribute; True or False if image is default thumbnail
 
-# %%
+# %% id="ifmfOf3X99qW" colab_type="code" colab={}
 df["image_filename"] = df["thumbnail_link"].apply(lambda x : x.replace('/', '').replace(':', '_'))
 
-# %%
+# %% id="KdRisd-199qo" colab_type="code" outputId="ce4cf690-14e0-4ae3-9612-042a797598f3" colab={"base_uri": "https://localhost:8080/", "height": 1000}
 is_default_dict = {}
 def check_if_image_is_default(thumbnail_link, default_sample):
+    return False
     global is_default_dict
     images_path = '../data/images'
     image_filename = thumbnail_link.replace('/', '').replace(':', '_')
@@ -151,51 +157,40 @@ def check_if_image_is_default(thumbnail_link, default_sample):
             is_default_dict[image_filename] = is_default
             return is_default
 
-df["has_thumbnail"] = df["thumbnail_link"].apply(lambda x : not check_if_image_is_default(x, default_sample))
+df["has_thumbnail"] = df["thumbnail_link"].apply(lambda x : True)
 default_thumbnails = df[df["has_thumbnail"] == False]["image_filename"].values
 df.head(3)
 
-# %% [markdown]
-# ### (optional) - save list of default images to file, to avoid repeating the same work
-
-# %%
-default_thumbnails = df[df["has_thumbnail"] == False]["image_filename"].values
-
-with open("../data/default_images.txt", "w") as handle:
-    for dt in default_thumbnails:
-        handle.write(dt)
-        handle.write('\n')
-
-# %% [markdown]
+# %% [markdown] id="_C6vQgTy99qv" colab_type="text"
 # ### Prepare `df_images` dataframe that will store only UNIQUE links to images, which are not default images
 
-# %%
+# %% id="GFwB25NO99q8" colab_type="code" outputId="96895f60-9ad3-4c09-dce0-6f3898dd10e6" colab={"base_uri": "https://localhost:8080/", "height": 34}
 df_images = pd.DataFrame(
     {"image_filename": np.unique(df.loc[df["has_thumbnail"] == True, "image_filename"].values)}
 )
 df_images.head(5)
 print(df_images.shape)
 
-# %% [markdown]
+# %% [markdown] id="g3-od_JQ99rC" colab_type="text"
 # ### Load detection models
 # > Tested: YOLO, tinyTOLO and Retinanet, however YOLO turned out to yield the best results.
 #
 # > Sometimes the results could be complementary to each other, but we skipped those detections as they were too costly computationally, while still uncertain if detections are correct AND useful.
 
-# %%
+# %% id="X5uj41Az99rD" colab_type="code" outputId="ed2a4e75-98b4-4ec0-e9bf-1eacd67773f2" colab={"base_uri": "https://localhost:8080/", "height": 255}
 from imageai.Detection import ObjectDetection
 
 def get_yolo_detector():
     detector = ObjectDetection()
     detector.setModelTypeAsYOLOv3()
-    detector.setModelPath('../models/yolo.h5')
+    detector.setModelPath(f'{path_base}models/yolo.h5')
     detector.loadModel()
     return detector
 
 def get_retinanet_detector():
     detector = ObjectDetection()
     detector.setModelTypeAsRetinaNet()
-    detector.setModelPath('../models/resnet50_coco_best_v2.0.1.h5')
+    detector.setModelPath(f'{path_base}models/resnet50_coco_best_v2.0.1.h5')
     detector.loadModel()
     return detector
 
@@ -211,15 +206,15 @@ detectors_dict = {
 
 import cv2
 
-models_path = "../models"
+models_path = f"{path_base}models"
 face_cascade = cv2.CascadeClassifier(os.path.join(models_path, 'haarcascade_frontalface_default.xml'))
-# %% [markdown]
+# %% [markdown] id="X-zQpHXn99rJ" colab_type="text"
 # ### Test object detection on some sample images
 # > Take only TOP 5 detections every time (sorted by probability)
 #
 # We decreased the `minimum_percentage_probability`, as the images are small and the models have some troubles detecting objects. In some images, all the probabilities would be below 50% (default threshold), while still accurate.
 
-# %%
+# %% id="77VpNYuB99rL" colab_type="code" outputId="29fb6e2b-5814-4860-e572-e92e40411f25" colab={"base_uri": "https://localhost:8080/", "height": 758}
 def resize_image(img, scale_percent):
     width = int(img.shape[1] * scale_percent / 100)
     height = int(img.shape[0] * scale_percent / 100)
@@ -234,6 +229,7 @@ for image_path in sample_images[:5]:
     
     print()
     print(image_path)
+    print(type(img))
     
     fig = plt.figure(figsize=(3, 3))
     plt.imshow(img)
@@ -244,7 +240,9 @@ for image_path in sample_images[:5]:
         detection = sorted(detectors_dict[d_name].detectObjectsFromImage(
                 input_image=img,
                 input_type="array",
-                minimum_percentage_probability=25
+                minimum_percentage_probability=25,
+                # output_image_path="test.png"
+                # output_type="array",
             ), key=lambda x : -1*x["percentage_probability"]
         )
 
@@ -255,36 +253,56 @@ for image_path in sample_images[:5]:
     print(f"Haar Cascade faces -> number of detections = {len(detections)}")
 
 
-# %% [markdown]
+# %% id="I-TZSjNL99rT" colab_type="code" outputId="c50ea200-b6f3-47ef-9ac6-165238dcd4f6" colab={"base_uri": "https://localhost:8080/", "height": 374}
+detectors_dict[d_name].detectObjectsFromImage(
+                input_image=img,
+                input_type="array",
+                minimum_percentage_probability=25,
+                output_image_path="test.png"
+#                 output_type="array",
+            )
+
+# %% [markdown] id="vJM72I7y99rb" colab_type="text"
 # ### Perform YOLO detection on all thumbnails
 # > `WARNING`: This is taking a lot of time.
 # #### Result of running the cell below is written to `yolo_detections.json` file for convenience
 
-# %%
+# %% id="qO3Fd_8e99rc" colab_type="code" outputId="24a8c693-000a-4e41-c897-096bac0ac6d6" colab={"base_uri": "https://localhost:8080/", "height": 163}
+[name for name in os.listdir("../data/images2") if name.startswith("https:i.ytimg.comvi__")]
+
+# %% id="WBQzsBDA99rl" colab_type="code" outputId="aa4d4211-2936-436c-b2c1-9f197bddfa7a" colab={"base_uri": "https://localhost:8080/", "height": 68}
 image_filenames = df_images["image_filename"].values
 yolo_detections = []
 
-# for idx, i in enumerate(image_filenames):
-for idx, i in enumerate(image_filenames[:5]):
+for idx, i in enumerate(image_filenames):
+# for idx, i in enumerate(image_filenames[:5]):
     image_path = os.path.join(images_path, i)
-    img = mpimg.imread(image_path)
-    detection = sorted(yolo_d.detectObjectsFromImage(
-            input_image=img,
-            input_type="array",
-            minimum_percentage_probability=25
-        ), key=lambda x : -1*x["percentage_probability"]
-    )[:5] # assumption - take top 5 most confident
-    classes = [item["name"] for item in detection]
-    yolo_detections.append(classes)
-    print(f'"{i}": {str(classes)},')
+    try:
+        img = mpimg.imread(image_path.replace("https_", "https:")) # .replace("-", "_"))
+        detection = sorted(yolo_d.detectObjectsFromImage(
+                input_image=img,
+                input_type="array",
+                minimum_percentage_probability=25,
+                output_image_path="test.png"
+            ), key=lambda x : -1*x["percentage_probability"]
+        )[:5] # assumption - take top 5 most confident
+        classes = [item["name"] for item in detection]
+        yolo_detections.append(classes)
+    except FileNotFoundError:
+        print(f"File {image_path} not found!!!")
+    if idx + 1 % 200 == 0:
+      print(f'Step {idx + 1}/ {len(image_filenames)} "{i}": {str(classes)},')
 
-# %% [markdown]
+# %% id="ZhH4tPcG99rs" colab_type="code" outputId="83a5de5c-7ec6-4d22-cd69-601a9c4d706a" colab={"base_uri": "https://localhost:8080/", "height": 102}
+yolo_detections[:5]
+
+# %% [markdown] id="-atSZeWH99ry" colab_type="text"
 # ### Load `json` storing YOLO detections
 # > What are the most common detections?
 
-# %%
+# %% id="ei6D2G2m99rz" colab_type="code" colab={}
 import json
-with open("..\data\yolo_detections.json", "r") as handle:
+with open("..\data\yolo_detections_not_trending.json", "r") as handle:
     yolo_detections_dict = json.load(handle)
     
 all_detections = []
@@ -294,13 +312,13 @@ for key in yolo_detections_dict:
 from collections import Counter
 Counter(all_detections).most_common(15)
 
-# %% [markdown]
+# %% [markdown] id="CnFrjUUq99r5" colab_type="text"
 # What are all possible classes that were found?
 
-# %%
+# %% id="6XB56eTc99sD" colab_type="code" colab={}
 print(set(all_detections), "\n", "number of classes:", len(set(all_detections)))
 
-# %% [markdown]
+# %% [markdown] id="I0dPq7mk99sK" colab_type="text"
 # #### Which detections are actually useful?
 # - Only one class is dominant: 'person'
 # - Another one, **TV**, might also be useful, but we should keep in mind that TV seems hard to detect
@@ -316,7 +334,7 @@ print(set(all_detections), "\n", "number of classes:", len(set(all_detections)))
 # - animals
 # - food 
 
-# %%
+# %% id="hRmOUKYn99sL" colab_type="code" colab={}
 vehicles = "bicycle,   car,   motorcycle,   airplane, bus,   train,   truck,   boat "
 vehicles = list(map(lambda x : x.strip(), vehicles.split(',')))
 
@@ -326,7 +344,7 @@ animals = list(map(lambda x : x.strip(), animals.split(',')))
 food = "  banana,   apple,   sandwich,   orange, broccoli,   carrot,   hot dog,   pizza,   donut,   cake  "
 food = list(map(lambda x : x.strip(), food.split(',')))
 
-# %%
+# %% id="ShKeEP8699sS" colab_type="code" colab={}
 df_images["has_detection"] = df_images["image_filename"].apply(lambda x : len(yolo_detections_dict[x]) > 0)
 df_images["person_detected"] = df_images["image_filename"].apply(lambda x : "person" in yolo_detections_dict[x])
 df_images["object_detected"] = df_images["image_filename"].apply(lambda x : len(yolo_detections_dict[x]) > 0 and any(d != "person" for d in yolo_detections_dict[x]))
@@ -337,51 +355,56 @@ df_images["food_detected"] = df_images["image_filename"].apply(lambda x : any(d 
 
 df_images.head(4)
 
-# %% [markdown]
+# %% [markdown] id="V0oBLw7t99sZ" colab_type="text"
 # #### How many rows have `True` values in the newly created attributes?
 # - any_detection: 81% 
 # - person: 71%
 # - vehicles: almost 4% ...
 
-# %%
+# %% id="HMhEoj6f99sa" colab_type="code" colab={}
 for cname in df_images.columns:
     if 'detect' in cname:
         print(cname, " : ", df_images[cname].sum(), " : ", f"{df_images[cname].sum() / df_images.shape[0] * 100.0:.2f}%")
 
-# %% [markdown]
+# %% [markdown] id="S3Cp4NIA99sy" colab_type="text"
 # ### Perform Haar Cascade face detection on all thumbnails
 
-# %%
+# %% id="6e-fWuP799s0" colab_type="code" outputId="cbed4ea7-f12f-40a7-e5a3-ede52ca04364" colab={"base_uri": "https://localhost:8080/", "height": 561}
 image_filenames = df_images["image_filename"].values
 face_detections = []
 
 for idx, i in enumerate(image_filenames):
-    image_path = os.path.join(images_path, i)
-    img = mpimg.imread(image_path)
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    
-    detections = face_cascade.detectMultiScale(gray, 1.03, 3)
-    face_detections.append(len(detections))
+    image_path = os.path.join(images_path, i.replace("https_i", "https:i"))
+    try:
+      img = mpimg.imread(image_path)
+      gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+      
+      detections = face_cascade.detectMultiScale(gray, 1.03, 3)
+      face_detections.append(len(detections))
+    except FileNotFoundError:
+      pass
+    if (idx + 1) % 200 == 0:
+        print(f"Step {idx} / {len(image_filenames)}")
 
-# %%
+# %% id="q9IhBicg99s9" colab_type="code" colab={}
 face_detections = np.asarray(face_detections)
 n, bins, patches = plt.hist(face_detections, density=True, facecolor='b', alpha=0.75)
 
 plt.grid(True)
 plt.show()
 
-# %% [markdown]
+# %% [markdown] id="rrjomjyE99tE" colab_type="text"
 # The histogram shows that usually no face is detected, however, the algorithm manages to detect a face in some cases. Therefore, we will use it as an additional feature - single number.
 
-# %% [markdown]
+# %% [markdown] id="RoTvEdg599tG" colab_type="text"
 # #### Add attribute: `face_count` based upon Haar Cascade algorithm
 
-# %%
+# %% id="Oxr2RXB099tH" colab_type="code" colab={}
 fd_dict = dict(zip(image_filenames, face_detections))
 df_images["face_count"] = df_images["image_filename"].apply(lambda x : fd_dict[x])
 df_images.head(10)
 
-# %% [markdown]
+# %% [markdown] id="Mq0eEoqU99tN" colab_type="text"
 # ## Images metadata - median pixel values and histograms (`5 bins`)
 #
 # We can analyze images on lower level than objects/text detection. 
@@ -393,10 +416,10 @@ df_images.head(10)
 #
 # - More in-depth approach would create a histogram of pixel values for each image. We don't need to use many bins to be able to tell if an image is rather bright or dark. Values of those 5 bins can be a feature of an image.
 
-# %% [markdown]
+# %% [markdown] id="Ta6TQuO999tP" colab_type="text"
 # ### A) When converted to grayscale
 
-# %%
+# %% id="iJZ2cdZL99tQ" colab_type="code" colab={}
 img_cache = {}
 def get_gray_histogram(image_filename):
     global img_cache
@@ -426,12 +449,12 @@ df_images.loc[:, "gray_median"] = df_images["image_filename"].apply(get_median_g
 
 df_images.head(3)
 
-# %% [markdown]
+# %% [markdown] id="nPyjO2Al99tf" colab_type="text"
 # #### Median pixel value of an image
 #
 # Looking at the histogram, we can tell that most images median value is something in the middle of pixel range: 0.0 - 255.0. However, there is a tendency towards darker images - left tail of the histogram is thicker.
 
-# %%
+# %% id="kyZkTCme99th" colab_type="code" colab={}
 gray_medians = df_images.loc[:, "gray_median"].values
 BINS = 10
 n, bins, patches = plt.hist(gray_medians, edgecolor='black', bins=10)
@@ -439,7 +462,7 @@ n, bins, patches = plt.hist(gray_medians, edgecolor='black', bins=10)
 for i in range(len(patches)):
     patches[i].set_facecolor((i/10.0, i/10.0, i/10.0))
 
-# %% [markdown]
+# %% [markdown] id="VxAENj6Y99to" colab_type="text"
 # #### More details - plot distributions of each histogram bin separately
 # How is the visualization below constructed:
 # - for each image, a histogram is computed with 5 bins
@@ -450,7 +473,7 @@ for i in range(len(patches)):
 #
 # There are not many bright images, while darker images exist. Looking at the lowest pixel range, 0.0-51.0 (where max=255.0) - leftmost plot, a bin with the highest value corresponds to 20%-40%; second highest - 40%-60%. Looking at the next histograms, the leftmost bin, representing 0%-20% range, is getting higher and higher value.
 
-# %%
+# %% id="qzmI8NYo99tp" colab_type="code" colab={}
 gray_histograms = np.stack(df_images.loc[:, "gray_histogram"].values)
 
 fig, axes = plt.subplots(1, 5, figsize=(24, 4))
@@ -465,7 +488,7 @@ for i in range(len(axes)):
 
 plt.show()
 
-# %% [markdown]
+# %% [markdown] id="ePlQ2mVh99t0" colab_type="text"
 # ### B) When converted to HSV
 #
 # We can perform similar analysis in HSV color scale, as it is way more interpretable than RGB.
@@ -475,7 +498,7 @@ plt.show()
 # - Saturation
 # - Value
 
-# %%
+# %% id="b571xGb599t2" colab_type="code" colab={}
 img_cache = {}
 def get_hsv_histogram(image_filename, channel="hue"):
     global img_cache
@@ -513,7 +536,7 @@ df_images.loc[:, "value_median"] = df_images["image_filename"].apply(lambda x : 
 
 df_images.head()
 
-# %% [markdown]
+# %% [markdown] id="MFuZnWHa99t9" colab_type="text"
 # #### B) a) HUE
 #
 # We can distinguish two dominant colors looking at the distribution of median HUE value across all the images.
@@ -523,7 +546,7 @@ df_images.head()
 #
 # Green and pink medians are rare.
 
-# %%
+# %% id="vwtnDJHr99t-" colab_type="code" colab={}
 import matplotlib.colors
 
 hue_medians = df_images.loc[:, "hue_median"].values
@@ -533,7 +556,7 @@ n, bins, patches = plt.hist(hue_medians, edgecolor='black', bins=10)
 for i in range(len(patches)):
     patches[i].set_facecolor(matplotlib.colors.hsv_to_rgb((i/10, 1.0, 1.0)))
 
-# %% [markdown]
+# %% [markdown] id="K6bhq12H99uQ" colab_type="text"
 # #### More details - plot distributions of each histogram bin separately
 #
 # Looking at the detailed histograms, we can observe that:
@@ -543,7 +566,7 @@ for i in range(len(patches)):
 #
 # <u>On the plot below, the colors do not refer to the bins at all - the bins are colored to represent the color range</u>
 
-# %%
+# %% id="DU8-EPgl99uR" colab_type="code" colab={}
 hue_histograms = np.stack(df_images.loc[:, "hue_histogram"].values)
 
 fig, axes = plt.subplots(1, 5, figsize=(24, 4))
@@ -566,13 +589,13 @@ for i in range(len(axes)):
     
 plt.show()
 
-# %% [markdown]
+# %% [markdown] id="QCTjAGBE99uc" colab_type="text"
 # #### B) b) SATURATION
 
-# %% [markdown]
+# %% [markdown] id="dTsmTyA499ud" colab_type="text"
 # Analysis of median SATURATION of all images show that most images are not highly saturated. Highest values cummulate below the middle value of saturation available. A histogram has a right tail longer, with reflects the tendency towards mild saturation.
 
-# %%
+# %% id="l9AXw-Ih99ug" colab_type="code" colab={}
 saturation_medians = df_images.loc[:, "saturation_median"].values
 BINS = 10
 n, bins, patches = plt.hist(saturation_medians, edgecolor='black', bins=10)
@@ -580,12 +603,12 @@ n, bins, patches = plt.hist(saturation_medians, edgecolor='black', bins=10)
 for i in range(len(patches)):
     patches[i].set_facecolor(matplotlib.colors.hsv_to_rgb((1.0, i/10.0, 1.0)))
 
-# %% [markdown]
+# %% [markdown] id="GGwZpqPG99uo" colab_type="text"
 # #### B) c) VALUE
 #
 # Median of the VALUE seems to be normally distributed. Medium values are the most frequent, and the edge values are the least.
 
-# %%
+# %% id="PCz0krOH99ut" colab_type="code" colab={}
 value_medians = df_images.loc[:, "value_median"].values
 BINS = 15
 n, bins, patches = plt.hist(value_medians, edgecolor='black', bins=BINS)
@@ -594,13 +617,13 @@ for i in range(len(patches)):
     patches[i].set_facecolor(matplotlib.colors.hsv_to_rgb((0.75, 0.75, i/BINS)))
 
 
-# %% [markdown]
+# %% [markdown] id="8j7bmH7j99vH" colab_type="text"
 # ### Edge detection 
 # We can try to describe DYNAMICS of an image by applying Canny filter.
 #
 # We add `edges` attribute which is a ratio of edges detected to all pixels in an image. Lower values mean that the image is smooth. Higher values suggest that the image is dynamic and the frequencies change often.
 
-# %%
+# %% id="goa4D-6D99vJ" colab_type="code" colab={}
 def get_edges(image_filename):
     img = mpimg.imread(os.path.join(images_path, image_filename))
     img = img[11:79, :, :]
@@ -611,22 +634,22 @@ df_images.loc[:, "edges"] = df_images["image_filename"].apply(get_edges)
 df_images.head(3)
 
 
-# %% [markdown]
+# %% [markdown] id="og5HF8oG99vf" colab_type="text"
 # It turns out that the distribution of such ratio is pretty normal. Usually the edges ratio is around 20-25%.
 
-# %%
+# %% id="jiN7xXLu99vg" colab_type="code" colab={}
 edges = df_images.loc[:, "edges"].values
 BINS = 15
 n, bins, patches = plt.hist(edges, edgecolor='black', bins=BINS)
 
-# %% [markdown]
+# %% [markdown] id="hhs68AdB99vm" colab_type="text"
 # ## Save DF to file
 
-# %%
+# %% id="bu3-e8Wo99vo" colab_type="code" colab={}
 df_images.head()
 
-# %%
+# %% id="C6i9neQf99v0" colab_type="code" colab={}
 df_images.to_csv("..\data\image_attributes.csv", index=False)
 
-# %% [markdown]
+# %% [markdown] id="IhPph-b499wU" colab_type="text"
 # ### Voila!
