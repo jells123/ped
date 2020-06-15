@@ -93,7 +93,7 @@ def download_urls(urls, images_path, url2filename_func):
             else:
                 write_to_file(os.path.join(images_path, url2filename_func(url)), data)
 
-if True:
+if DOWNLOAD_IMAGES:
      download_urls(URLs, images_path, url2filename)
 # %% [markdown]
 # ## Images preview
