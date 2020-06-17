@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.4.1
+#       jupytext_version: 1.4.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -35,6 +35,9 @@ img_df_2 = pd.read_csv(os.path.join('..', 'data', 'image_attributes_nawrba.csv')
 img_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_bedzju_not_trending_corr.csv')).drop_duplicates()
 img_df_2_not_trending = pd.read_csv(os.path.join('..', 'data', 'image_attributes_not_trending_nawrba.csv')).drop_duplicates()
 text_df_not_trending = pd.read_csv(os.path.join('..', 'data', 'not_trending_text_attributes_all.csv'))
+
+# %%
+img_df_not_trending.columns
 
 # %%
 img_df_2 = img_df_2.groupby('thumbnail_link').nth(0)
@@ -239,7 +242,7 @@ def get_count_tfidf_embeddings(df, cname, split_cname, n_embeddings=20, N=50):
 
     bow_agg_df = df.groupby("video_id").agg(
         values=(new_cname, reduce_histogram),
-        is_trending=("is_trending", lambda s : max(s)),
+        label=(split_cname, lambda s : max(s)),
     ).reset_index()
 
     X = np.stack(bow_agg_df["values"].values, axis=0)
@@ -247,10 +250,38 @@ def get_count_tfidf_embeddings(df, cname, split_cname, n_embeddings=20, N=50):
     X_pca = pca.fit_transform(X)
     return X_pca , top_n_dict
 
-pca_result, top_n_dict = get_count_tfidf_embeddings(df, "title", "is_trending")
+def get_count_tfidf_embeddings_raw(df, cname, split_cname, N=30):
+    vectorizer = TfidfVectorizer(stop_words='english')
+    vectors = vectorizer.fit_transform(np.unique(df[cname].values))
 
+    bow = []
+    top_n_dict = {i : {} for i in df[split_cname].value_counts().keys()}
+    
+    for i in df[split_cname].value_counts().keys():
+        words = np.unique(df[df[split_cname] == i][cname].values)
+        words1 = [w[0] for w in get_top_n_words(words, n=N)]
+        words2 = [w[0] for w in top_tfidf_scores(words, n=N)]
+        bow.extend(words1); bow.extend(words2)
+        top_n_dict[i]["top-n"] = words1
+        top_n_dict[i]["tfidf"] = words2
+        
+    bow = list(sorted(set(bow)))    
 
-# %%
+    words_onehot = []
+    new_cname = f"{cname}_onehot_{split_cname}"
+    df[new_cname] = df[cname].apply(lambda x : onehot_encode(x, bow))
+
+    bow_agg_df = df.groupby("video_id").agg(
+        values=(new_cname, reduce_histogram),
+#         label=(split_cname, lambda s : max(s)),
+    ).reset_index()
+    
+    return bow_agg_df.values[:, 1], bow
+
+# pca_result, top_n_dict = get_count_tfidf_embeddings(df, "title", "is_trending")
+dfx, bow_list = get_count_tfidf_embeddings_raw(df, "title", "is_trending")
+list(zip(dfx[0], bow_list))
+
 
 # %% [markdown]
 # ## Perform aggregations
@@ -344,15 +375,34 @@ agg_df = df.groupby("video_id").agg(
     is_trending=('is_trending', lambda x: list(x)[0])
 )
 
-# agg_df["title_onehot"] = list(map(list, X_pca))
+# OLD FEATURE:
+agg_df["title_onehot"] = list(map(list, X_pca))
+
+
+# IS TRENDING SPECIFIC + PCA
 values, d1 = get_count_tfidf_embeddings(df, "title", "category_id")
-agg_df["title_onehot_category_id"] = values.tolist()
+agg_df["title_onehot_category_id_PCA"] = values.tolist()
 
 values, d2 = get_count_tfidf_embeddings(df, "title", "is_trending")
-agg_df["title_onehot_is_trending"] = values.tolist()
+agg_df["title_onehot_is_trending_PCA"] = values.tolist()
 
-values, d3 = get_count_tfidf_embeddings(df, "title", "description")
+values, d3 = get_count_tfidf_embeddings(df, "description", "is_trending")
+agg_df["description_onehot_is_trending_PCA"] = values.tolist()
+
+
+# IS TRENDING SPECIFIC + NO PCA (raw ONE HOT)
+bows = {}
+values, bow = get_count_tfidf_embeddings_raw(df, "title", "category_id")
+agg_df["title_onehot_category_id"] = values.tolist()
+bows[("title", "category_id")] = bow
+
+values, bow = get_count_tfidf_embeddings_raw(df, "title", "is_trending")
+agg_df["title_onehot_is_trending"] = values.tolist()
+bows[("title", "is_trending")] = bow
+
+values, bow = get_count_tfidf_embeddings_raw(df, "description", "is_trending")
 agg_df["description_onehot_is_trending"] = values.tolist()
+bows[("description", "is_trending")] = bow
 
 agg_df.head()
 
@@ -362,9 +412,6 @@ del df
 del text_df
 del img_df
 del img_df_2
-
-# %%
-agg_df
 
 # %% [markdown]
 # ### Extract subsets: numeric columns, non-numeric, histograms and videos with category_id given
@@ -628,43 +675,65 @@ std_deviations.plot.bar(figsize=(14, 7), rot=45)
 # > Feature selection is performed using ANOVA F measure via the f_classif() function.
 
 # %%
+agg_df.columns
 
-FEATURE_SELECTION_COLUMNS = ['category_id', 'publish_time', 'views_median',
-       'views_max', 'likes_median', 'likes_max', 'dislikes_median',
-       'dislikes_max', 'comments_disabled', 'ratings_disabled',
-       'video_error_or_removed', 'week_day', 'time_of_day', 'month',
-       'title_changes', 'title_length_chars', 'title_length_tokens',
-       'title_uppercase_ratio', 'title_not_alnum_ratio',
-       'title_common_chars_count', 'channel_title_length_chars',
-       'channel_title_length_tokens', 'tags_count', 'description_changes',
-       'description_length_chars', 'description_length_tokens',
-       'description_length_newlines', 'description_uppercase_ratio',
-       'description_url_count', 'description_emojis_counts', 'has_detection',
-       'person_detected', 'object_detected', 'vehicle_detected',
-       'animal_detected', 'food_detected', 'face_count', 'gray_histogram',
-       'hue_histogram', 'saturation_histogram', 'value_histogram',
-       'gray_median', 'hue_median', 'saturation_median', 'value_median',
-       'edges', 'ocr_length_tokens', 'angry_count', 'surprise_count',
-       'fear_count', 'happy_count', 'is_trending',
-       'title_onehot']
+# %%
+
+FEATURE_SELECTION_COLUMNS = [
+    'category_id', 'publish_time', 'views_median',
+    'views_max', 'likes_median', 'likes_max', 'dislikes_median',
+    'dislikes_max', 'comments_disabled', 'ratings_disabled',
+    'video_error_or_removed', 'week_day', 'time_of_day', 'month',
+    'title_changes', 'title_length_chars', 'title_length_tokens',
+    'title_uppercase_ratio', 'title_not_alnum_ratio',
+    'title_common_chars_count', 'channel_title_length_chars',
+    'channel_title_length_tokens', 'tags_count', 'description_changes',
+    'description_length_chars', 'description_length_tokens',
+    'description_length_newlines', 'description_uppercase_ratio',
+    'description_url_count', 'description_emojis_counts', 'has_detection',
+    'person_detected', 'object_detected', 'vehicle_detected',
+    'animal_detected', 'food_detected', 'face_count', 'gray_histogram',
+    'hue_histogram', 'saturation_histogram', 'value_histogram',
+    'gray_median', 'hue_median', 'saturation_median', 'value_median',
+    'edges', 'ocr_length_tokens', 'angry_count', 'surprise_count',
+    'fear_count', 'happy_count', 'is_trending',
+
+    # ONE HOT PCA MACARENA HERE
+    # 'title_onehot', 
+    'title_onehot_category_id_PCA',
+    'title_onehot_is_trending_PCA', 'description_onehot_is_trending_PCA',
+    'title_onehot_category_id', 'title_onehot_is_trending',
+    'description_onehot_is_trending'
+]
 
 # %%
 import math
 from sklearn.model_selection import train_test_split
+import json
 
+#title_onehot_category_id
 def transform_onehot_df(df):
     for cname in df.columns:
-        if 'onehot' in cname:
-            prefix = cname.split('_')[0]
+        if 'onehot' in cname and cname.endswith("PCA"):
+            prefix = cname.replace("onehot", "")            
             for i in range(len(df[cname].values[0])):
                 df[f"{prefix}_{i}_bin"] = df[cname].apply(lambda x : x[i])
             df = df.drop(columns=[cname])
+    return df
+
+def transform_onehot_df_with_vocabulary(df, source_cname, split_cname, bow_list):
+    cname = f"{source_cname}_onehot_{split_cname}"
+    for i in range(len(df[cname].values[0])):
+        word_cname = cname + "_" + bow_list[i]
+        df[word_cname] = df[cname].apply(lambda x : x[i])
+    df = df.drop(columns=[cname])
     return df
 
 df_feature_selection = agg_df[FEATURE_SELECTION_COLUMNS]
 
 with open(os.path.join("..", "data", "API_categories.json"), "r") as handle:
     ids_to_categories_dict = json.load(handle)
+    
 df_feature_selection["category_id"] = df_feature_selection[["category_id"]].apply(
     # Fill missing categories
     lambda row : ids_to_categories_dict.get(row.name, -1) if math.isnan(row.category_id) or row.category_id == -1 else row.category_id,
@@ -674,6 +743,17 @@ df_feature_selection["category_id"] = df_feature_selection[["category_id"]].appl
 df_feature_selection_numeric = transform_histogram_df(df_feature_selection)
 df_feature_selection_numeric = transform_onehot_df(df_feature_selection)
 
+for source_cname, split_cname in bows.keys():
+    if split_cname == "category_id":
+        # SKIP ONEHOTS FOR CATEGORY ID FOR NOW :)
+        continue
+    df_feature_selection_numeric = transform_onehot_df_with_vocabulary(
+        df_feature_selection, 
+        source_cname, 
+        split_cname,
+        bows[(source_cname, split_cname)]
+    )
+    
 df_feature_selection_numeric = df_feature_selection_numeric[
     [cname for idx, cname in enumerate(df_feature_selection_numeric.columns) if df_feature_selection_numeric.dtypes[idx] in [np.int64, np.float64, np.bool]]
 ]
@@ -685,7 +765,6 @@ X = (X - X.min()) / (X.max()-X.min()+1e-12) # normalize values - how about those
 
 # Splitting
 
-
 train_idxs, test_idxs = train_test_split(np.arange(X.shape[0]), test_size=0.2)
 
 X_columns = X.columns
@@ -695,6 +774,12 @@ X = X[train_idxs]
 y = y[train_idxs]
 
 X.shape
+
+# %%
+df_feature_selection_numeric[["is_trending", 'has_detection', 'person_detected', 'object_detected',
+       'vehicle_detected', 'animal_detected', 'food_detected', 'gray_0_bin',
+       'gray_1_bin', 'gray_2_bin', 'gray_3_bin', 'gray_4_bin'
+                             ]]
 
 # %%
 from sklearn.feature_selection import SelectKBest
@@ -709,15 +794,16 @@ print(fit.scores_)
 features = fit.transform(X)
 
 cols = selector.get_support(indices=True)
-print(list(X_columns[cols]))
+print(X_columns[cols])
+
 with open(os.path.join("..", "data", "anova_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(X_columns[cols]), fp)
 
-X_indices = np.arange(X.shape[-1])
-plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
+# X_indices = np.arange(X.shape[-1])
+# plt.bar(X_indices, -np.log10(selector.pvalues_), tick_label=X_columns)
 # plt.bar(X_indices, selector.pvalues_, tick_label=X_columns)
 
-plt.xticks(rotation=45)
+# plt.xticks(rotation=45)
 
 
 # %%
@@ -731,7 +817,7 @@ print(fit.scores_)
 features = fit.transform(X)
 
 cols = selector.get_support(indices=True)
-print(list(X_columns[cols]))
+print(X_columns[cols])
 
 with open(os.path.join("..", "data", "chi2_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(X_columns[cols]), fp)
@@ -751,7 +837,8 @@ print(fit.scores_)
 features = fit.transform(X)
 
 cols = selector.get_support(indices=True)
-print(list(X_columns[cols]))
+print(X_columns[cols])
+
 with open(os.path.join("..", "data", "mi_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(X_columns[cols]), fp)
 
@@ -762,13 +849,13 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.feature_selection import RFECV
 from sklearn.datasets import make_classification
 
-
 # Create the RFE object and compute a cross-validated score.
 svc = SVC(kernel="linear", class_weight='balanced')
+
 # The "accuracy" scoring is proportional to the number of correct
 # classifications
-rfecv = RFECV(estimator=svc, step=1, cv=StratifiedKFold(n_splits=15, shuffle=True, random_state=15042020),
-              scoring='accuracy')
+rfecv = RFECV(estimator=svc, step=5, cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=15042020),
+              scoring='accuracy', verbose=3)
 rfecv.fit(X, y)
 
 print("Optimal number of features : %d" % rfecv.n_features_)
@@ -806,3 +893,5 @@ selected = pd.read_csv(os.path.join(os.path.join("..", "data", "selected_feature
 # %% jupyter={"outputs_hidden": false}
 with open(os.path.join("..", "data", "rfecv_best_all_no_embeddings.json"), "w") as fp:
     json.dump(list(selected.columns)[1:], fp)
+
+# %%
